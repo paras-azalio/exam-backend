@@ -126,8 +126,9 @@ public class ResultService {
                     .subj div { margin-bottom: 5px; }
                     .correct-hint { color: #2e7d32; }
                     /* ── status badges ── */
-                    .badge-correct   { color: green; font-weight: bold; }
-                    .badge-incorrect { color: red;   font-weight: bold; }
+                    .badge-correct   { color: green;  font-weight: bold; }
+                    .badge-incorrect { color: red;    font-weight: bold; }
+                    .badge-skipped   { color: #888;   font-weight: bold; }
                     @media print { body { padding: 20px; } }
                   </style>
                 </head>
@@ -163,16 +164,19 @@ public class ResultService {
 
     @SuppressWarnings("unchecked")
     private String buildQuestionBlock(Map<String, Object> d) {
-        boolean correct     = Boolean.TRUE.equals(d.get("correct"));
+        boolean correct      = Boolean.TRUE.equals(d.get("correct"));
+        boolean notAttempted = d.get("userAnswer") == null;
         Object  marksAwarded = d.get("marksAwarded");
         Object  totalMarks   = d.get("totalMarks");
-        String  qNum        = String.valueOf(d.getOrDefault("questionNumber", "?"));
-        String  qText       = esc(String.valueOf(d.getOrDefault("questionText", "")));
-        String  qType       = String.valueOf(d.getOrDefault("questionType", "mcq"));
+        String  qNum         = String.valueOf(d.getOrDefault("questionNumber", "?"));
+        String  qText        = esc(String.valueOf(d.getOrDefault("questionText", "")));
+        String  qType        = String.valueOf(d.getOrDefault("questionType", "mcq"));
 
         String badge = correct
                 ? "<span class='badge-correct'>&#10003; Correct</span>"
-                : "<span class='badge-incorrect'>&#10007; Incorrect</span>";
+                : notAttempted
+                    ? "<span class='badge-skipped'>&#8213; Not Attempted</span>"
+                    : "<span class='badge-incorrect'>&#10007; Incorrect</span>";
 
         String marksLabel = formatMark(marksAwarded) + " / " + totalMarks;
 
