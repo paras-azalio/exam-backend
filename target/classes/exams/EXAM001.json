@@ -1,0 +1,123 @@
+{
+  "examCode": "EXAM001",
+  "examTitle": "Sample Examination - Mathematics & Science",
+  "duration": 3600,
+  "canNavigate": true,
+  "submissionType": "complete",
+  "maxViolations": 5,
+  "maxScreenShareViolations": 2,
+  "recordCamera": true,
+  "recordScreen": true,
+  "shuffleQuestions": true,
+  "grading": [
+    { "grade": "S", "minPercentage": 90 },
+    { "grade": "A", "minPercentage": 80 },
+    { "grade": "B", "minPercentage": 70 },
+    { "grade": "C", "minPercentage": 60 },
+    { "grade": "D", "minPercentage": 50 },
+    { "grade": "F", "minPercentage": 0 }
+  ],
+  "resultConfig": {
+    "showStudentName": true,
+    "showExamCode": true,
+    "showScore": true,
+    "showTotalMarks": true,
+    "showGrade": true,
+    "showPerformanceSummary": true,
+    "showQuestionResults": true,
+    "showDownloadPDF": true,
+    "showTakeAnotherExam": true
+  },
+  "sections": [
+    {
+      "sectionId": "A",
+      "sectionName": "Mathematics",
+      "questions": [
+        {
+          "id": "q1",
+          "number": 1,
+          "type": "mcq",
+          "multipleChoice": false,
+          "question": "What is 2 + 2?",
+          "options": [
+            { "id": "a", "text": "3", "type": "text" },
+            { "id": "b", "text": "4", "type": "text" },
+            { "id": "c", "text": "5", "type": "text" },
+            { "id": "d", "text": "6", "type": "text" }
+          ],
+          "correctAnswer": ["b"],
+          "marks": 2,
+          "negativeMarks": 0.5,
+          "timeLimit": null
+        },
+        {
+          "id": "q2",
+          "number": 2,
+          "type": "mcq",
+          "multipleChoice": true,
+          "question": "Select all prime numbers:",
+          "options": [
+            { "id": "a", "text": "2", "type": "text" },
+            { "id": "b", "text": "4", "type": "text" },
+            { "id": "c", "text": "5", "type": "text" },
+            { "id": "d", "text": "9", "type": "text" }
+          ],
+          "correctAnswer": ["a", "c"],
+          "marks": 3,
+          "negativeMarks": 1,
+          "timeLimit": 60
+        },
+        {
+          "id": "q3",
+          "number": 3,
+          "type": "subjective",
+          "question": "Solve: If x + 5 = 10, find the value of x.",
+          "correctAnswer": ["5", "x=5"],
+          "marks": 5,
+          "negativeMarks": 0,
+          "timeLimit": null
+        }
+      ]
+    },
+    {
+      "sectionId": "B",
+      "sectionName": "Science",
+      "questions": [
+        {
+          "id": "q4",
+          "number": 4,
+          "type": "mcq",
+          "multipleChoice": false,
+          "question": "What is the chemical symbol for water?",
+          "options": [
+            { "id": "a", "text": "H2O", "type": "text" },
+            { "id": "b", "text": "CO2", "type": "text" },
+            { "id": "c", "text": "O2", "type": "text" },
+            { "id": "d", "text": "N2", "type": "text" }
+          ],
+          "correctAnswer": ["a"],
+          "marks": 2,
+          "negativeMarks": 0.5,
+          "timeLimit": null
+        },
+        {
+          "id": "q5",
+          "number": 5,
+          "type": "mcq",
+          "multipleChoice": false,
+          "question": "Identify the planet:",
+          "options": [
+            { "id": "a", "text": "https://images.pexels.com/photos/87651/earth-blue-planet-globe-planet-87651.jpeg?auto=compress&cs=tinysrgb&w=100", "type": "image" },
+            { "id": "b", "text": "https://images.pexels.com/photos/39896/space-station-moon-landing-apollo-15-james-irwin-39896.jpeg?auto=compress&cs=tinysrgb&w=100", "type": "image" },
+            { "id": "c", "text": "https://images.pexels.com/photos/2159/flight-sky-earth-space.jpg?auto=compress&cs=tinysrgb&w=100", "type": "image" },
+            { "id": "d", "text": "https://images.pexels.com/photos/2156/sky-earth-space-working.jpg?auto=compress&cs=tinysrgb&w=100", "type": "image" }
+          ],
+          "correctAnswer": ["a"],
+          "marks": 2,
+          "negativeMarks": 0,
+          "timeLimit": null
+        }
+      ]
+    }
+  ]
+}

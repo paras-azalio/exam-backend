@@ -1,0 +1,11 @@
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\config\CorsConfig.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\controller\ExamController.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\controller\MediaController.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\controller\ResultController.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\dto\SaveResultRequest.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\ExamBackendApplication.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\model\ExamResult.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\repository\ExamResultRepository.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\service\ExamService.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\service\MediaService.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\service\ResultService.java
