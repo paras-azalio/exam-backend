@@ -18,11 +18,8 @@ public class ExamController {
     @GetMapping("/{examCode}")
     public ResponseEntity<Map<String, Object>> getExam(@PathVariable String examCode) {
         try {
-            Map<String, Object> exam = examService.getExam(examCode);
-            if (exam == null) {
-                return ResponseEntity.notFound().build();
-            }
-            return ResponseEntity.ok(exam);
+            Map<String, Object> exam = examService.getActiveExam(examCode);
+            return exam != null ? ResponseEntity.ok(exam) : ResponseEntity.notFound().build();
         } catch (IOException e) {
             return ResponseEntity.internalServerError().build();
         }

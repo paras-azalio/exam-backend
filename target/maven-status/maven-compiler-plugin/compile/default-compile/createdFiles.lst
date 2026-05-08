@@ -1,3 +1,12 @@
+com\exam\backend\model\ExamResult.class
+com\exam\backend\controller\ExamController.class
 com\exam\backend\ExamBackendApplication.class
 com\exam\backend\config\CorsConfig$1.class
+com\exam\backend\service\ExamService.class
 com\exam\backend\config\CorsConfig.class
+com\exam\backend\controller\ResultController.class
+com\exam\backend\service\MediaService.class
+com\exam\backend\repository\ExamResultRepository.class
+com\exam\backend\controller\MediaController.class
+com\exam\backend\service\ResultService.class
+com\exam\backend\dto\SaveResultRequest.class
