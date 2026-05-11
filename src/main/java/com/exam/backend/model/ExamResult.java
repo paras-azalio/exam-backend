@@ -22,6 +22,9 @@ public class ExamResult {
     @Column(name = "student_name")
     private String studentName;
 
+    @Column(name = "student_email")
+    private String studentEmail;
+
     @Column(name = "exam_code", length = 50)
     private String examCode;
 

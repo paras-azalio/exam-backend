@@ -1,8 +1,11 @@
 package com.exam.backend.controller;
 
 import com.exam.backend.dto.ExamRequest;
+import com.exam.backend.dto.GenerateLinkRequest;
+import com.exam.backend.dto.GenerateLinkResponse;
 import com.exam.backend.model.Exam;
 import com.exam.backend.service.ExamService;
+import com.exam.backend.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +20,7 @@ import java.util.Map;
 public class AdminExamController {
 
     private final ExamService examService;
+    private final JwtService  jwtService;
 
     @GetMapping
     public List<Exam> list() {
@@ -57,6 +61,21 @@ public class AdminExamController {
             return ResponseEntity.ok(examService.toggleActive(id));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Generate a signed JWT invite link for a specific user + exam. */
+    @PostMapping("/{id}/generate-link")
+    public ResponseEntity<?> generateLink(@PathVariable Long id,
+                                          @RequestBody GenerateLinkRequest req) {
+        try {
+            Exam exam = examService.findById(id);
+            String link      = jwtService.generateLink(req.getUserName(), req.getUserEmail(),
+                                                       exam.getExamCode(), req.getValidForMinutes());
+            String expiresAt = jwtService.expiresAt(req.getValidForMinutes());
+            return ResponseEntity.ok(new GenerateLinkResponse(link, expiresAt));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }

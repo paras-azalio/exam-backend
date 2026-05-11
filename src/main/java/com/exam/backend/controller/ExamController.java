@@ -1,5 +1,6 @@
 package com.exam.backend.controller;
 
+import com.exam.backend.repository.UsedTokenRepository;
 import com.exam.backend.service.ExamService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +14,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ExamController {
 
-    private final ExamService examService;
+    private final ExamService          examService;
+    private final UsedTokenRepository  usedTokenRepository;
 
     @GetMapping("/{examCode}")
     public ResponseEntity<Map<String, Object>> getExam(@PathVariable String examCode) {
@@ -23,5 +25,15 @@ public class ExamController {
         } catch (IOException e) {
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    /**
+     * Lets the frontend check—before the exam starts—whether a JWT invite
+     * token has already been consumed.  Returns { "used": true/false }.
+     */
+    @GetMapping("/check-token/{jti}")
+    public ResponseEntity<Map<String, Object>> checkToken(@PathVariable String jti) {
+        boolean used = usedTokenRepository.existsById(jti);
+        return ResponseEntity.ok(Map.of("used", used));
     }
 }

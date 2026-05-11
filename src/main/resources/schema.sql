@@ -22,17 +22,27 @@ CREATE TABLE IF NOT EXISTS exams (
 );
 
 CREATE TABLE IF NOT EXISTS exam_results (
-  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-  session_key  VARCHAR(300) NOT NULL UNIQUE,
-  student_name VARCHAR(255),
-  exam_code    VARCHAR(50),
-  exam_title   VARCHAR(500),
-  score        DOUBLE,
-  total_marks  DOUBLE,
-  grade        VARCHAR(10),
-  pdf_path     VARCHAR(500),
-  started_at   DATETIME,
-  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  session_key   VARCHAR(300) NOT NULL UNIQUE,
+  student_name  VARCHAR(255),
+  student_email VARCHAR(255),
+  exam_code     VARCHAR(50),
+  exam_title    VARCHAR(500),
+  score         DOUBLE,
+  total_marks   DOUBLE,
+  grade         VARCHAR(10),
+  pdf_path      VARCHAR(500),
+  started_at    DATETIME,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_result_session (session_key),
   INDEX idx_result_exam    (exam_code)
+);
+
+-- Tracks JWT invite tokens that have already been used to submit an exam.
+-- Prevents the same invite link from being used more than once.
+CREATE TABLE IF NOT EXISTS used_tokens (
+  jti           VARCHAR(100) NOT NULL PRIMARY KEY,
+  exam_code     VARCHAR(50),
+  student_email VARCHAR(255),
+  used_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

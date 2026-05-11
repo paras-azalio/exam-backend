@@ -6,12 +6,17 @@ C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\controller\MediaController.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\controller\ResultController.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\dto\ExamRequest.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\dto\GenerateLinkRequest.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\dto\GenerateLinkResponse.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\dto\SaveResultRequest.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\ExamBackendApplication.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\model\Exam.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\model\ExamResult.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\model\UsedToken.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\repository\ExamRepository.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\repository\ExamResultRepository.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\repository\UsedTokenRepository.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\service\ExamService.java
+C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\service\JwtService.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\service\MediaService.java
 C:\Users\parmahaj\Documents\Projects\exam-backend\src\main\java\com\exam\backend\service\ResultService.java
