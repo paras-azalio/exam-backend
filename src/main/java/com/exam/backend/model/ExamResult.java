@@ -51,6 +51,10 @@ public class ExamResult {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    /** Admin-flagged (checked) entries are moved to the bottom of the results list. */
+    @Column(name = "checked", nullable = false)
+    private boolean checked = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

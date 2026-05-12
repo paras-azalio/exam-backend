@@ -33,9 +33,17 @@ public class ResultService {
 
     public ExamResult saveResult(SaveResultRequest req) throws IOException {
         // ── One-time link check ──────────────────────────────────────────────────
+        // Allow the save if the sessionKey already exists in the DB — this handles
+        // the beacon-then-normal-submit race (or vice-versa) where the same exam
+        // session submits twice.  Only reject when a *different* session tries to
+        // reuse the same invite token.
         if (req.getJti() != null && !req.getJti().isBlank()) {
             if (usedTokenRepository.existsById(req.getJti())) {
-                throw new IllegalStateException("This invite link has already been used.");
+                boolean sameSession = resultRepository.findBySessionKey(req.getSessionKey()).isPresent();
+                if (!sameSession) {
+                    throw new IllegalStateException("This invite link has already been used.");
+                }
+                // Same session → fall through and update the existing row
             }
         }
 

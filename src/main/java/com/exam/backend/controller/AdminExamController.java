@@ -87,6 +87,7 @@ public class AdminExamController {
                 row.put("grade",        r.getGrade());
                 row.put("startedAt",    r.getStartedAt());
                 row.put("createdAt",    r.getCreatedAt());
+                row.put("checked",      r.isChecked());
                 return row;
             }).collect(Collectors.toList());
 
@@ -102,10 +103,12 @@ public class AdminExamController {
                                           @RequestBody GenerateLinkRequest req) {
         try {
             Exam exam = examService.findById(id);
-            String link      = jwtService.generateLink(req.getUserName(), req.getUserEmail(),
-                                                       exam.getExamCode(), req.getValidForMinutes());
-            String expiresAt = jwtService.expiresAt(req.getValidForMinutes());
-            return ResponseEntity.ok(new GenerateLinkResponse(link, expiresAt));
+            String link      = jwtService.generateLink(
+                    req.getUserName(), req.getUserEmail(), exam.getExamCode(),
+                    req.getValidForMinutes(), req.getValidFromIso(), req.getValidUntilIso());
+            String expiresAt = jwtService.computeExpiresAt(req.getValidForMinutes(), req.getValidUntilIso());
+            String validFrom = jwtService.computeValidFrom(req.getValidFromIso());
+            return ResponseEntity.ok(new GenerateLinkResponse(link, expiresAt, validFrom));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

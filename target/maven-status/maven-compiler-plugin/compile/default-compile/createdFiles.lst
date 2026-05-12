@@ -7,6 +7,7 @@ com\exam\backend\config\AdminAuthInterceptor.class
 com\exam\backend\controller\ResultController.class
 com\exam\backend\model\UsedToken.class
 com\exam\backend\dto\SaveResultRequest.class
+com\exam\backend\controller\AdminResultController.class
 com\exam\backend\controller\ExamController.class
 com\exam\backend\dto\GenerateLinkResponse.class
 com\exam\backend\config\CorsConfig$1.class
