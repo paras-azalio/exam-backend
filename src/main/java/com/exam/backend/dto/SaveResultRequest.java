@@ -8,6 +8,9 @@ import java.util.Map;
 public class SaveResultRequest {
     private String sessionKey;
     private String studentName;
+    private String studentEmail;
+    /** jti claim from the JWT invite token; present only for link-based exam entry. */
+    private String jti;
     private String examCode;
     private String examTitle;
     private Double score;

@@ -2,7 +2,9 @@ package com.exam.backend.service;
 
 import com.exam.backend.dto.SaveResultRequest;
 import com.exam.backend.model.ExamResult;
+import com.exam.backend.model.UsedToken;
 import com.exam.backend.repository.ExamResultRepository;
+import com.exam.backend.repository.UsedTokenRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,11 +26,27 @@ import java.util.Map;
 public class ResultService {
 
     private final ExamResultRepository resultRepository;
+    private final UsedTokenRepository  usedTokenRepository;
 
     @Value("${storage.base-path:C:/exam-recordings}")
     private String basePath;
 
     public ExamResult saveResult(SaveResultRequest req) throws IOException {
+        // ── One-time link check ──────────────────────────────────────────────────
+        // Allow the save if the sessionKey already exists in the DB — this handles
+        // the beacon-then-normal-submit race (or vice-versa) where the same exam
+        // session submits twice.  Only reject when a *different* session tries to
+        // reuse the same invite token.
+        if (req.getJti() != null && !req.getJti().isBlank()) {
+            if (usedTokenRepository.existsById(req.getJti())) {
+                boolean sameSession = resultRepository.findBySessionKey(req.getSessionKey()).isPresent();
+                if (!sameSession) {
+                    throw new IllegalStateException("This invite link has already been used.");
+                }
+                // Same session → fall through and update the existing row
+            }
+        }
+
         String htmlPath = writeHtmlReport(req);
 
         ExamResult result = resultRepository.findBySessionKey(req.getSessionKey())
@@ -36,6 +54,7 @@ public class ResultService {
 
         result.setSessionKey(req.getSessionKey());
         result.setStudentName(req.getStudentName());
+        result.setStudentEmail(req.getStudentEmail());
         result.setExamCode(req.getExamCode());
         result.setExamTitle(req.getExamTitle());
         result.setScore(req.getScore());
@@ -44,7 +63,19 @@ public class ResultService {
         result.setPdfPath(htmlPath);
         result.setStartedAt(parseStartedAt(req.getStartedAt()));
 
-        return resultRepository.save(result);
+        ExamResult saved = resultRepository.save(result);
+
+        // ── Mark token as used (after successful save) ───────────────────────────
+        if (req.getJti() != null && !req.getJti().isBlank()) {
+            usedTokenRepository.save(new UsedToken(
+                req.getJti(),
+                req.getExamCode(),
+                req.getStudentEmail(),
+                LocalDateTime.now()
+            ));
+        }
+
+        return saved;
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────

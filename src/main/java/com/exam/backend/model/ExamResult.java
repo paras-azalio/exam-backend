@@ -22,6 +22,9 @@ public class ExamResult {
     @Column(name = "student_name")
     private String studentName;
 
+    @Column(name = "student_email")
+    private String studentEmail;
+
     @Column(name = "exam_code", length = 50)
     private String examCode;
 
@@ -47,6 +50,10 @@ public class ExamResult {
     /** When the result was submitted / persisted. */
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    /** Admin-flagged (checked) entries are moved to the bottom of the results list. */
+    @Column(name = "checked", nullable = false)
+    private boolean checked = false;
 
     @PrePersist
     protected void onCreate() {

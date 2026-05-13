@@ -32,6 +32,9 @@ public class ResultController {
                     "sessionKey", saved.getSessionKey(),
                     "pdfPath", saved.getPdfPath() != null ? saved.getPdfPath() : ""
             ));
+        } catch (IllegalStateException e) {
+            // JWT token already used — 409 Conflict
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Failed to save result: " + e.getMessage()));

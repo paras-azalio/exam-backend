@@ -74,6 +74,11 @@ public class ExamService {
         return examRepository.save(exam);
     }
 
+    public Exam findById(Long id) {
+        return examRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + id));
+    }
+
     public void delete(Long id) {
         examRepository.deleteById(id);
     }
