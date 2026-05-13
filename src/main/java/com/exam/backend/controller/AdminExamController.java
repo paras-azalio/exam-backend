@@ -54,10 +54,42 @@ public class AdminExamController {
         }
     }
 
+    /** Soft-delete: moves the exam to the trash bin. */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        examService.delete(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> softDelete(@PathVariable Long id) {
+        try {
+            examService.softDelete(id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Returns all soft-deleted exams (trash bin). */
+    @GetMapping("/trash")
+    public List<Exam> listTrashed() {
+        return examService.listTrashed();
+    }
+
+    /** Restores an exam from the trash back to the live list. */
+    @PatchMapping("/{id}/restore")
+    public ResponseEntity<Exam> restore(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(examService.restore(id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Permanently deletes an exam from the database. */
+    @DeleteMapping("/{id}/permanent")
+    public ResponseEntity<Void> deletePermanently(@PathVariable Long id) {
+        try {
+            examService.deletePermanently(id);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
     @PatchMapping("/{id}/toggle")
