@@ -1,10 +1,13 @@
 package com.exam.backend.service;
 
 import com.exam.backend.dto.SaveResultRequest;
+import com.exam.backend.dto.ScoredResult;
 import com.exam.backend.model.ExamResult;
 import com.exam.backend.model.UsedToken;
+import com.exam.backend.repository.ExamRepository;
 import com.exam.backend.repository.ExamResultRepository;
 import com.exam.backend.repository.UsedTokenRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -18,8 +21,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -27,28 +29,63 @@ public class ResultService {
 
     private final ExamResultRepository resultRepository;
     private final UsedTokenRepository  usedTokenRepository;
+    private final ExamRepository       examRepository;
+    private final ObjectMapper         mapper;
 
     @Value("${storage.base-path:C:/exam-recordings}")
     private String basePath;
 
-    public ExamResult saveResult(SaveResultRequest req) throws IOException {
+    // ── Public API ────────────────────────────────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    public ScoredResult saveResult(SaveResultRequest req) throws IOException {
+
         // ── One-time link check ──────────────────────────────────────────────────
-        // Allow the save if the sessionKey already exists in the DB — this handles
-        // the beacon-then-normal-submit race (or vice-versa) where the same exam
-        // session submits twice.  Only reject when a *different* session tries to
-        // reuse the same invite token.
+        // Allow the save if the sessionKey already exists — this handles the
+        // beacon-then-normal-submit race (or vice-versa).  Only reject when a
+        // *different* session tries to reuse the same invite token.
         if (req.getJti() != null && !req.getJti().isBlank()) {
             if (usedTokenRepository.existsById(req.getJti())) {
                 boolean sameSession = resultRepository.findBySessionKey(req.getSessionKey()).isPresent();
                 if (!sameSession) {
                     throw new IllegalStateException("This invite link has already been used.");
                 }
-                // Same session → fall through and update the existing row
             }
         }
 
-        String htmlPath = writeHtmlReport(req);
+        // ── Load full exam from DB (correct answers never leave the server) ───────
+        String examJson = examRepository.findByExamCodeIgnoreCase(req.getExamCode())
+                .map(com.exam.backend.model.Exam::getExamData)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Exam not found: " + req.getExamCode()));
 
+        Map<String, Object> examMap = mapper.readValue(examJson, Map.class);
+
+        // ── Score answers server-side ─────────────────────────────────────────────
+        List<Map<String, Object>> details = scoreAnswers(
+                examMap, req.getAnswers(), req.getQuestionOrderMap());
+
+        double totalMarks = 0;
+        double rawScore   = 0;
+        for (Map<String, Object> d : details) {
+            totalMarks += ((Number) d.get("totalMarks")).doubleValue();
+            rawScore   += ((Number) d.get("marksAwarded")).doubleValue();
+        }
+        double score = Math.max(0, rawScore);
+        String grade = resolveGrade(examMap, score, totalMarks);
+
+        // ── Derive exam title ─────────────────────────────────────────────────────
+        String examTitle = (req.getExamTitle() != null && !req.getExamTitle().isBlank())
+                ? req.getExamTitle()
+                : String.valueOf(examMap.getOrDefault("examTitle", req.getExamCode()));
+
+        // ── Write HTML report ─────────────────────────────────────────────────────
+        String htmlPath = writeHtmlReport(
+                req.getSessionKey(), req.getStudentName(),
+                req.getExamCode(), examTitle,
+                score, totalMarks, grade, details);
+
+        // ── Persist result ────────────────────────────────────────────────────────
         ExamResult result = resultRepository.findBySessionKey(req.getSessionKey())
                 .orElse(new ExamResult());
 
@@ -56,29 +93,144 @@ public class ResultService {
         result.setStudentName(req.getStudentName());
         result.setStudentEmail(req.getStudentEmail());
         result.setExamCode(req.getExamCode());
-        result.setExamTitle(req.getExamTitle());
-        result.setScore(req.getScore());
-        result.setTotalMarks(req.getTotalMarks());
-        result.setGrade(req.getGrade());
+        result.setExamTitle(examTitle);
+        result.setScore(score);
+        result.setTotalMarks(totalMarks);
+        result.setGrade(grade);
         result.setPdfPath(htmlPath);
         result.setStartedAt(parseStartedAt(req.getStartedAt()));
 
         ExamResult saved = resultRepository.save(result);
 
-        // ── Mark token as used (after successful save) ───────────────────────────
-        if (req.getJti() != null && !req.getJti().isBlank()) {
+        // ── Mark token as used (idempotent) ──────────────────────────────────────
+        if (req.getJti() != null && !req.getJti().isBlank()
+                && !usedTokenRepository.existsById(req.getJti())) {
             usedTokenRepository.save(new UsedToken(
-                req.getJti(),
-                req.getExamCode(),
-                req.getStudentEmail(),
-                LocalDateTime.now()
-            ));
+                    req.getJti(), req.getExamCode(), req.getStudentEmail(), LocalDateTime.now()));
         }
 
-        return saved;
+        return new ScoredResult(saved, score, totalMarks, grade, details);
     }
 
-    // ── helpers ─────────────────────────────────────────────────────────────────
+    // ── Server-side scoring ───────────────────────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> scoreAnswers(
+            Map<String, Object> examMap,
+            List<Map<String, Object>> rawAnswers,
+            Map<String, Object> questionOrderMap) {
+
+        // Build lookup: questionId → raw answer value (String or List)
+        Map<String, Object> answerLookup = new HashMap<>();
+        if (rawAnswers != null) {
+            for (Map<String, Object> entry : rawAnswers) {
+                String qId = String.valueOf(entry.get("questionId"));
+                answerLookup.put(qId, entry.get("answer"));
+            }
+        }
+
+        List<Map<String, Object>> details = new ArrayList<>();
+        List<Object> sections = (List<Object>) examMap.get("sections");
+        if (sections == null) return details;
+
+        for (Object sectionObj : sections) {
+            Map<String, Object> section = (Map<String, Object>) sectionObj;
+            List<Object> questions = (List<Object>) section.get("questions");
+            if (questions == null) continue;
+
+            for (Object qObj : questions) {
+                Map<String, Object> q = (Map<String, Object>) qObj;
+
+                String  qId      = String.valueOf(q.get("id"));
+                String  qText    = String.valueOf(q.getOrDefault("question", ""));
+                String  qType    = String.valueOf(q.getOrDefault("type", "mcq"));
+                double  marks    = ((Number) q.getOrDefault("marks", 0)).doubleValue();
+                double  negMarks = ((Number) q.getOrDefault("negativeMarks", 0)).doubleValue();
+                boolean multi    = Boolean.TRUE.equals(q.get("multipleChoice"));
+
+                List<Object> correctRaw = (List<Object>) q.get("correctAnswer");
+                List<String> correctAnswer = correctRaw == null ? List.of()
+                        : correctRaw.stream().map(Object::toString).toList();
+
+                List<Object> options = (List<Object>) q.get("options");
+
+                // Resolve display number from the order map or fall back to JSON number
+                int displayNumber = 0;
+                if (questionOrderMap != null && questionOrderMap.containsKey(qId)) {
+                    displayNumber = ((Number) questionOrderMap.get(qId)).intValue();
+                } else if (q.get("number") != null) {
+                    displayNumber = ((Number) q.get("number")).intValue();
+                }
+
+                List<String> userAnswer = toStringList(answerLookup.get(qId));
+                boolean notAttempted = userAnswer.isEmpty();
+
+                boolean correct       = false;
+                double  marksAwarded  = 0;
+                if (!notAttempted) {
+                    correct      = checkAnswer(qType, multi, correctAnswer, userAnswer);
+                    marksAwarded = correct ? marks : -negMarks;
+                }
+
+                // Normalise userAnswer shape to match what the HTML report + PDF expect
+                Object userAnswerOut;
+                if (notAttempted) {
+                    userAnswerOut = null;
+                } else if (multi || "subjective".equalsIgnoreCase(qType)) {
+                    userAnswerOut = userAnswer;
+                } else {
+                    userAnswerOut = userAnswer.get(0);
+                }
+
+                Map<String, Object> detail = new LinkedHashMap<>();
+                detail.put("questionId",     qId);
+                detail.put("questionNumber", displayNumber);
+                detail.put("questionText",   qText);
+                detail.put("questionType",   qType);
+                detail.put("options",        options);
+                detail.put("correctAnswer",  correctAnswer);
+                detail.put("userAnswer",     userAnswerOut);
+                detail.put("correct",        correct);
+                detail.put("marksAwarded",   marksAwarded);
+                detail.put("totalMarks",     marks);
+                details.add(detail);
+            }
+        }
+
+        details.sort(Comparator.comparingInt(d -> ((Number) d.get("questionNumber")).intValue()));
+        return details;
+    }
+
+    private boolean checkAnswer(String qType, boolean multi,
+                                List<String> correct, List<String> user) {
+        if ("subjective".equalsIgnoreCase(qType)) {
+            String ua = user.isEmpty() ? "" : user.get(0).toLowerCase().trim();
+            return correct.stream().anyMatch(ca -> ca.toLowerCase().trim().equals(ua));
+        } else if (multi) {
+            return user.stream().sorted().toList()
+                    .equals(correct.stream().sorted().toList());
+        } else {
+            String ua = user.isEmpty() ? "" : user.get(0);
+            return !correct.isEmpty() && correct.get(0).equals(ua);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolveGrade(Map<String, Object> examMap, double score, double totalMarks) {
+        List<Object> grading = (List<Object>) examMap.get("grading");
+        if (grading == null || grading.isEmpty()) return null;
+        double pct = totalMarks > 0 ? (score / totalMarks) * 100 : 0;
+        return grading.stream()
+                .map(g -> (Map<String, Object>) g)
+                .sorted(Comparator.comparingDouble(
+                        g -> -((Number) g.get("minPercentage")).doubleValue()))
+                .filter(g -> pct >= ((Number) g.get("minPercentage")).doubleValue())
+                .map(g -> String.valueOf(g.get("grade")))
+                .findFirst()
+                .orElse("F");
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────────
 
     private LocalDateTime parseStartedAt(String iso) {
         if (iso == null || iso.isBlank()) return null;
@@ -89,30 +241,39 @@ public class ResultService {
         }
     }
 
-    /**
-     * Writes a detailed HTML result report to:
-     *   {basePath}/{sessionKey}/{sessionKey}.html
-     *
-     * Each question block shows the full question text, all options with
-     * colour-coded correct / user-selected highlights, and marks awarded.
-     */
-    private String writeHtmlReport(SaveResultRequest req) throws IOException {
-        Path dir = Paths.get(basePath, req.getSessionKey());
+    @SuppressWarnings("unchecked")
+    private List<String> toStringList(Object val) {
+        if (val == null) return List.of();
+        if (val instanceof List<?> list) {
+            return list.stream()
+                    .filter(Objects::nonNull)
+                    .map(Object::toString)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+        }
+        String s = val.toString().trim();
+        return s.isBlank() ? List.of() : List.of(s);
+    }
+
+    // ── HTML report ───────────────────────────────────────────────────────────────
+
+    private String writeHtmlReport(
+            String sessionKey, String studentName,
+            String examCode, String examTitle,
+            double score, double totalMarks, String grade,
+            List<Map<String, Object>> details) throws IOException {
+
+        Path dir  = Paths.get(basePath, sessionKey);
         Files.createDirectories(dir);
-        Path file = dir.resolve(req.getSessionKey() + ".html");
+        Path file = dir.resolve(sessionKey + ".html");
 
-        double pct = (req.getTotalMarks() != null && req.getTotalMarks() > 0)
-                ? (req.getScore() / req.getTotalMarks()) * 100 : 0;
-
-        String gradeHtml = (req.getGrade() != null && !req.getGrade().isBlank())
-                ? "<p><strong>Grade: " + esc(req.getGrade()) + "</strong></p>" : "";
+        double pct       = totalMarks > 0 ? (score / totalMarks) * 100 : 0;
+        String gradeHtml = (grade != null && !grade.isBlank())
+                ? "<p><strong>Grade: " + esc(grade) + "</strong></p>" : "";
 
         StringBuilder questions = new StringBuilder();
-        List<Map<String, Object>> details = req.getDetails();
-        if (details != null) {
-            for (Map<String, Object> d : details) {
-                questions.append(buildQuestionBlock(d));
-            }
+        for (Map<String, Object> d : details) {
+            questions.append(buildQuestionBlock(d));
         }
 
         String html = """
@@ -132,7 +293,6 @@ public class ResultService {
                                  border-radius: 8px; text-align: center;
                                  margin: 20px 0; }
                     .score-box h2 { margin: 0 0 8px; color: #2563eb; }
-                    /* ── question blocks ── */
                     .q-block { border: 1px solid #ddd; border-radius: 8px;
                                padding: 16px; margin-bottom: 18px;
                                page-break-inside: avoid; }
@@ -141,25 +301,18 @@ public class ResultService {
                     .q-num   { font-weight: bold; font-size: 15px; }
                     .q-marks { font-size: 14px; color: #555; }
                     .q-text  { font-size: 15px; margin: 6px 0 12px; }
-                    /* ── options ── */
                     .option { padding: 8px 12px; margin-bottom: 6px;
                               border-radius: 4px; border: 1px solid #e0e0e0;
                               font-size: 14px; }
-                    .opt-correct          { background: #e8f5e9; border-color: #4caf50;
-                                            color: #2e7d32; }
-                    .opt-correct-selected { background: #c8e6c9; border-color: #2e7d32;
-                                            color: #1b5e20; font-weight: bold; }
-                    .opt-wrong-selected   { background: #ffebee; border-color: #f44336;
-                                            color: #c62828; }
-                    /* ── subjective ── */
-                    .subj { background: #f9f9f9; padding: 10px 14px;
-                            border-radius: 4px; font-size: 14px; }
+                    .opt-correct          { background: #e8f5e9; border-color: #4caf50; color: #2e7d32; }
+                    .opt-correct-selected { background: #c8e6c9; border-color: #2e7d32; color: #1b5e20; font-weight: bold; }
+                    .opt-wrong-selected   { background: #ffebee; border-color: #f44336; color: #c62828; }
+                    .subj { background: #f9f9f9; padding: 10px 14px; border-radius: 4px; font-size: 14px; }
                     .subj div { margin-bottom: 5px; }
                     .correct-hint { color: #2e7d32; }
-                    /* ── status badges ── */
-                    .badge-correct   { color: green;  font-weight: bold; }
-                    .badge-incorrect { color: red;    font-weight: bold; }
-                    .badge-skipped   { color: #888;   font-weight: bold; }
+                    .badge-correct   { color: green; font-weight: bold; }
+                    .badge-incorrect { color: red;   font-weight: bold; }
+                    .badge-skipped   { color: #888;  font-weight: bold; }
                     @media print { body { padding: 20px; } }
                   </style>
                 </head>
@@ -177,17 +330,14 @@ public class ResultService {
                 </body>
                 </html>
                 """.formatted(
-                esc(req.getExamCode()),
-                esc(req.getExamTitle()),
-                esc(req.getExamCode()),
-                esc(req.getStudentName()),
+                esc(examCode),
+                esc(examTitle),
+                esc(examCode),
+                esc(studentName),
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm")),
-                req.getScore(),
-                req.getTotalMarks(),
-                pct,
+                score, totalMarks, pct,
                 gradeHtml,
-                questions
-        );
+                questions);
 
         Files.writeString(file, html, StandardCharsets.UTF_8);
         return file.toAbsolutePath().toString();
@@ -214,7 +364,6 @@ public class ResultService {
         StringBuilder body = new StringBuilder();
 
         if ("subjective".equalsIgnoreCase(qType)) {
-            // ── subjective ──────────────────────────────────────────────────
             String userAns = formatAnswer(d.get("userAnswer"));
             String corrAns = formatAnswer(d.get("correctAnswer"));
             body.append("<div class='subj'>")
@@ -222,9 +371,7 @@ public class ResultService {
                 .append("<div class='correct-hint'><strong>Correct answer:</strong> ")
                 .append(esc(corrAns)).append("</div>")
                 .append("</div>");
-
         } else {
-            // ── MCQ ─────────────────────────────────────────────────────────
             List<Object> options    = (List<Object>) d.get("options");
             List<String> correctIds = toStringList(d.get("correctAnswer"));
             List<String> userIds    = toStringList(d.get("userAnswer"));
@@ -232,17 +379,16 @@ public class ResultService {
             if (options != null) {
                 for (Object optObj : options) {
                     Map<String, Object> opt = (Map<String, Object>) optObj;
-                    String id      = String.valueOf(opt.getOrDefault("id", ""));
-                    String type    = String.valueOf(opt.getOrDefault("type", "text"));
-                    String text    = "image".equalsIgnoreCase(type)
+                    String id   = String.valueOf(opt.getOrDefault("id", ""));
+                    String type = String.valueOf(opt.getOrDefault("type", "text"));
+                    String text = "image".equalsIgnoreCase(type)
                             ? "[Image option " + id.toUpperCase() + "]"
                             : esc(String.valueOf(opt.getOrDefault("text", "")));
 
                     boolean isCorrect  = correctIds.contains(id);
                     boolean isSelected = userIds.contains(id);
 
-                    String cls;
-                    String marker;
+                    String cls, marker;
                     if (isCorrect && isSelected) { cls = "opt-correct-selected"; marker = "&#10003;"; }
                     else if (isCorrect)           { cls = "opt-correct";          marker = "&#10003;"; }
                     else if (isSelected)          { cls = "opt-wrong-selected";   marker = "&#10007;"; }
@@ -250,8 +396,7 @@ public class ResultService {
 
                     body.append("<div class='option ").append(cls).append("'>")
                         .append(marker).append(" (").append(id.toUpperCase()).append(") ")
-                        .append(text)
-                        .append("</div>");
+                        .append(text).append("</div>");
                 }
             }
         }
@@ -269,18 +414,12 @@ public class ResultService {
                 """.formatted(qNum, badge, marksLabel, qText, body);
     }
 
-    // ── tiny utilities ───────────────────────────────────────────────────────────
-
-    /** HTML-escape a string to prevent XSS in the saved report. */
     private String esc(String s) {
         if (s == null) return "";
-        return s.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
+        return s.replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace("\"", "&quot;");
     }
 
-    /** Format a marksAwarded value with a leading + for non-negative numbers. */
     private String formatMark(Object val) {
         if (val == null) return "0";
         try {
@@ -291,7 +430,6 @@ public class ResultService {
         }
     }
 
-    /** Convert a user/correct answer (may be String, List, or null) to a readable string. */
     @SuppressWarnings("unchecked")
     private String formatAnswer(Object val) {
         if (val == null) return "(Not answered)";
@@ -299,15 +437,5 @@ public class ResultService {
             return String.join(" / ", list.stream().map(Object::toString).toList());
         }
         return val.toString();
-    }
-
-    /** Return the value as a List<String>, handling String, List, or null. */
-    @SuppressWarnings("unchecked")
-    private List<String> toStringList(Object val) {
-        if (val == null) return List.of();
-        if (val instanceof List<?> list) {
-            return list.stream().map(Object::toString).toList();
-        }
-        return List.of(val.toString());
     }
 }

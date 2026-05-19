@@ -4,6 +4,7 @@ com\exam\backend\controller\AdminExamController.class
 com\exam\backend\ExamBackendApplication.class
 com\exam\backend\service\JwtService.class
 com\exam\backend\config\AdminAuthInterceptor.class
+com\exam\backend\dto\ScoredResult.class
 com\exam\backend\controller\ResultController.class
 com\exam\backend\model\UsedToken.class
 com\exam\backend\dto\SaveResultRequest.class

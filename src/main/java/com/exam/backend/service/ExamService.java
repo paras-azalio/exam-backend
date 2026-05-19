@@ -20,15 +20,57 @@ public class ExamService {
 
     // ── Public ────────────────────────────────────────────────────────────────
 
+    /**
+     * Returns exam metadata (title, duration, config, etc.) with the sections array
+     * removed entirely.  Questions are only revealed via {@link #getExamSections} which
+     * requires a valid JWT — so the full question list is never accessible in the
+     * network tab during the Recording Setup / Disclaimer phases.
+     */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getActiveExam(String examCode) throws IOException {
-        // Excludes trashed exams in addition to inactive ones
         return examRepository.findByExamCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull(examCode)
                 .map(e -> {
-                    try { return mapper.readValue(e.getExamData(), Map.class); }
+                    try {
+                        Map<String, Object> examMap = mapper.readValue(e.getExamData(), Map.class);
+                        examMap.remove("sections"); // fetched separately once exam actually starts
+                        return examMap;
+                    }
                     catch (IOException ex) { throw new RuntimeException(ex); }
                 })
                 .orElse(null);
+    }
+
+    /**
+     * Returns the sections array (with questions) for an active exam.
+     * {@code correctAnswer} is stripped from every question — scoring is server-side.
+     * This must only be called after the JWT has been validated by the controller.
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object> getExamSections(String examCode) throws IOException {
+        return examRepository.findByExamCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull(examCode)
+                .map(e -> {
+                    try {
+                        Map<String, Object> examMap = mapper.readValue(e.getExamData(), Map.class);
+                        List<Object> sections = (List<Object>) examMap.get("sections");
+                        if (sections != null) stripCorrectAnswers(sections);
+                        return sections;
+                    }
+                    catch (IOException ex) { throw new RuntimeException(ex); }
+                })
+                .orElse(null);
+    }
+
+    /** Removes correctAnswer from every question in a sections list. */
+    @SuppressWarnings("unchecked")
+    private void stripCorrectAnswers(List<Object> sections) {
+        for (Object sectionObj : sections) {
+            Map<String, Object> section = (Map<String, Object>) sectionObj;
+            List<Object> questions = (List<Object>) section.get("questions");
+            if (questions == null) continue;
+            for (Object qObj : questions) {
+                ((Map<String, Object>) qObj).remove("correctAnswer");
+            }
+        }
     }
 
     // ── Admin CRUD ────────────────────────────────────────────────────────────

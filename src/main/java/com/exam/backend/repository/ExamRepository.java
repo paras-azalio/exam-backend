@@ -10,6 +10,9 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
     /** Active exams visible to students — excludes anything in the trash. */
     Optional<Exam> findByExamCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull(String examCode);
 
+    /** Any exam by code regardless of active/deleted state — used for server-side scoring. */
+    Optional<Exam> findByExamCodeIgnoreCase(String examCode);
+
     /** All live (non-trashed) exams for the admin list. */
     List<Exam> findByDeletedAtIsNullOrderByCreatedAtDesc();
 
