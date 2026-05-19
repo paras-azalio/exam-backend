@@ -7,8 +7,15 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ExamRepository extends JpaRepository<Exam, Long> {
-    Optional<Exam> findByExamCodeIgnoreCaseAndActiveTrue(String examCode);
+    /** Active exams visible to students — excludes anything in the trash. */
+    Optional<Exam> findByExamCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull(String examCode);
+
+    /** All live (non-trashed) exams for the admin list. */
+    List<Exam> findByDeletedAtIsNullOrderByCreatedAtDesc();
+
+    /** All soft-deleted exams for the trash view. */
+    List<Exam> findByDeletedAtIsNotNullOrderByDeletedAtDesc();
+
     boolean existsByExamCodeIgnoreCase(String examCode);
     boolean existsByExamCodeIgnoreCaseAndIdNot(String examCode, Long id);
-    List<Exam> findAllByOrderByCreatedAtDesc();
 }

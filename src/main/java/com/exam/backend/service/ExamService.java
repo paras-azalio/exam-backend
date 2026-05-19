@@ -22,7 +22,8 @@ public class ExamService {
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> getActiveExam(String examCode) throws IOException {
-        return examRepository.findByExamCodeIgnoreCaseAndActiveTrue(examCode)
+        // Excludes trashed exams in addition to inactive ones
+        return examRepository.findByExamCodeIgnoreCaseAndActiveTrueAndDeletedAtIsNull(examCode)
                 .map(e -> {
                     try { return mapper.readValue(e.getExamData(), Map.class); }
                     catch (IOException ex) { throw new RuntimeException(ex); }
@@ -32,8 +33,14 @@ public class ExamService {
 
     // ── Admin CRUD ────────────────────────────────────────────────────────────
 
+    /** Returns all live (non-trashed) exams. */
     public List<Exam> listAll() {
-        return examRepository.findAllByOrderByCreatedAtDesc();
+        return examRepository.findByDeletedAtIsNullOrderByCreatedAtDesc();
+    }
+
+    /** Returns all soft-deleted exams (the trash bin). */
+    public List<Exam> listTrashed() {
+        return examRepository.findByDeletedAtIsNotNullOrderByDeletedAtDesc();
     }
 
     @SuppressWarnings("unchecked")
@@ -79,7 +86,24 @@ public class ExamService {
                 .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + id));
     }
 
-    public void delete(Long id) {
+    /** Soft-delete: moves the exam to the trash. */
+    public void softDelete(Long id) {
+        Exam exam = examRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + id));
+        exam.setDeletedAt(java.time.LocalDateTime.now());
+        examRepository.save(exam);
+    }
+
+    /** Restore a trashed exam back to the live list. */
+    public Exam restore(Long id) {
+        Exam exam = examRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + id));
+        exam.setDeletedAt(null);
+        return examRepository.save(exam);
+    }
+
+    /** Permanently removes the exam from the database. */
+    public void deletePermanently(Long id) {
         examRepository.deleteById(id);
     }
 

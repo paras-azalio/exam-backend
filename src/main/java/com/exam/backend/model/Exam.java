@@ -31,6 +31,10 @@ public class Exam {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    /** Null = live exam.  Non-null = soft-deleted (in trash). */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @PrePersist
     void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();
