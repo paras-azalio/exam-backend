@@ -318,11 +318,32 @@ public class VerbalEvaluationService {
             log.info("Verbal eval fired: questionId={} jti={} → HTTP {}",
                      aiResult.getQuestionId(), aiResult.getJti(), resp.statusCode());
 
+//            // Always capture the immediate API response for later analysis
+//            aiResult.setRequestResponse(resp.body());
+
             if (resp.statusCode() >= 400) {
                 aiResult.setStatus("FAILED");
                 aiResult.setResponse("HTTP " + resp.statusCode() + ": " + resp.body());
-                aiResultRepository.save(aiResult);
+            } else {
+                // Check if the API returned the score inline (e.g. simulate mode)
+                // instead of via a separate webhook callback.
+                try {
+                    Map<String, Object> respJson = mapper.readValue(resp.body(), Map.class);
+                    Object scoreRaw = respJson.get("scoreAssigned");
+                    if (scoreRaw != null) {
+                        double inlineScore = Double.parseDouble(scoreRaw.toString());
+                        aiResult.setAiScore(inlineScore);
+                        aiResult.setResponse(resp.body());
+                        aiResult.setReceivedAt(LocalDateTime.now());
+                        aiResult.setStatus("SUCCESS");
+                        log.info("Verbal score applied inline: questionId={} score={}",
+                                 aiResult.getQuestionId(), inlineScore);
+                    }
+                } catch (Exception ignored) {
+                    // Response is not JSON or has no scoreAssigned — webhook path, nothing to do
+                }
             }
+            aiResultRepository.save(aiResult);
 
         } catch (Exception e) {
             log.error("Failed to fire verbal evaluation for questionId={} jti={}: {}",

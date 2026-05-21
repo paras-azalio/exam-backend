@@ -68,6 +68,10 @@ public class AiResult {
     @Column(name = "request_curl", columnDefinition = "TEXT")
     private String requestCurl;
 
+//    /** Raw HTTP response body from the AI service at the time of the initial POST (acknowledgement or error). */
+//    @Column(name = "request_response", columnDefinition = "TEXT")
+//    private String requestResponse;
+
     /** When the HTTP POST was fired (or last retried). */
     @Column(name = "initiated_at")
     private LocalDateTime initiatedAt;
