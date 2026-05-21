@@ -68,6 +68,7 @@ public class AdminResultController {
         resp.put("html",   Files.exists(htmlPath) ? sessionKey + ".html" : null);
         resp.put("camera", listChunks(sessionDir.resolve("camera")));
         resp.put("screen", listChunks(sessionDir.resolve("screen")));
+        resp.put("verbal", listVerbalFiles(sessionDir));
 
         return ResponseEntity.ok(resp);
     }
@@ -178,6 +179,21 @@ public class AdminResultController {
                          .map(p -> p.getFileName().toString())
                          .sorted()                          // ascending → play in order
                          .collect(Collectors.toList());
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    /** Lists verbal_*.webm files directly in the session root directory. */
+    private List<String> listVerbalFiles(Path sessionDir) {
+        if (!Files.exists(sessionDir)) return List.of();
+        try (var stream = Files.list(sessionDir)) {
+            return stream
+                    .filter(p -> p.getFileName().toString().startsWith("verbal_")
+                              && p.getFileName().toString().endsWith(".webm"))
+                    .map(p -> p.getFileName().toString())
+                    .sorted()
+                    .collect(Collectors.toList());
         } catch (IOException e) {
             return List.of();
         }

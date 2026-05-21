@@ -2,8 +2,10 @@ package com.exam.backend.service;
 
 import com.exam.backend.dto.SaveResultRequest;
 import com.exam.backend.dto.ScoredResult;
+import com.exam.backend.model.AiResult;
 import com.exam.backend.model.ExamResult;
 import com.exam.backend.model.UsedToken;
+import com.exam.backend.repository.AiResultRepository;
 import com.exam.backend.repository.ExamRepository;
 import com.exam.backend.repository.ExamResultRepository;
 import com.exam.backend.repository.UsedTokenRepository;
@@ -27,10 +29,12 @@ import java.util.*;
 @RequiredArgsConstructor
 public class ResultService {
 
-    private final ExamResultRepository resultRepository;
-    private final UsedTokenRepository  usedTokenRepository;
-    private final ExamRepository       examRepository;
-    private final ObjectMapper         mapper;
+    private final ExamResultRepository    resultRepository;
+    private final AiResultRepository      aiResultRepository;
+    private final UsedTokenRepository     usedTokenRepository;
+    private final ExamRepository          examRepository;
+    private final ObjectMapper            mapper;
+    private final VerbalEvaluationService verbalEvaluationService;
 
     @Value("${storage.base-path:C:/exam-recordings}")
     private String basePath;
@@ -65,11 +69,14 @@ public class ResultService {
         List<Map<String, Object>> details = scoreAnswers(
                 examMap, req.getAnswers(), req.getQuestionOrderMap());
 
+        // Verbal questions are scored asynchronously — exclude from MCQ totals
         double totalMarks = 0;
         double rawScore   = 0;
         for (Map<String, Object> d : details) {
-            totalMarks += ((Number) d.get("totalMarks")).doubleValue();
-            rawScore   += ((Number) d.get("marksAwarded")).doubleValue();
+            if (!"verbal".equalsIgnoreCase(String.valueOf(d.get("questionType")))) {
+                totalMarks += ((Number) d.get("totalMarks")).doubleValue();
+                rawScore   += ((Number) d.get("marksAwarded")).doubleValue();
+            }
         }
         double score = Math.max(0, rawScore);
         String grade = resolveGrade(examMap, score, totalMarks);
@@ -99,8 +106,38 @@ public class ResultService {
         result.setGrade(grade);
         result.setPdfPath(htmlPath);
         result.setStartedAt(parseStartedAt(req.getStartedAt()));
+        if (req.getJti() != null && !req.getJti().isBlank()) {
+            result.setJti(req.getJti());
+        }
+        // totalScore is not stored on exam_results — the admin portal computes it
+        // on the fly from the ai_result table, so there is nothing to set here.
 
         ExamResult saved = resultRepository.save(result);
+
+        // ── Create AiResult rows / fire evaluations ───────────────────────────
+        // If AiResult rows already exist (created at audio-upload time), the AI
+        // was already fired; we just recompute the total to absorb any scores
+        // that arrived while the student was finishing the rest of the exam.
+        List<AiResult> aiResultsToFire = new java.util.ArrayList<>();
+        boolean anyAiRowsExist = !aiResultRepository.findByExamResult(saved).isEmpty();
+        if (!anyAiRowsExist) {
+            // Legacy / no-JWT path: fire AI from submission as before
+            for (Map<String, Object> d : details) {
+                if (!"verbal".equalsIgnoreCase(String.valueOf(d.get("questionType")))) continue;
+                AiResult ar = new AiResult();
+                ar.setExamResult(saved);
+                ar.setJti(saved.getJti());
+                ar.setQuestionId(String.valueOf(d.get("questionId")));
+                ar.setQuestion(String.valueOf(d.get("questionText")));
+                ar.setMaxMarks(((Number) d.get("totalMarks")).doubleValue());
+                ar.setExpectedReply(String.valueOf(d.getOrDefault("expectedReply", "")));
+                ar.setPrecisionLevel(((Number) d.getOrDefault("precisionLevel", 3)).intValue());
+                ar.setAudioPath(saved.getSessionKey() + "/verbal_" + d.get("questionId") + ".webm");
+                ar.setStatus("PENDING");
+                aiResultsToFire.add(aiResultRepository.save(ar));
+            }
+        }
+        verbalEvaluationService.fireVerbalEvaluations(aiResultsToFire);
 
         // ── Mark token as used (idempotent) ──────────────────────────────────────
         if (req.getJti() != null && !req.getJti().isBlank()
@@ -148,12 +185,6 @@ public class ResultService {
                 double  negMarks = ((Number) q.getOrDefault("negativeMarks", 0)).doubleValue();
                 boolean multi    = Boolean.TRUE.equals(q.get("multipleChoice"));
 
-                List<Object> correctRaw = (List<Object>) q.get("correctAnswer");
-                List<String> correctAnswer = correctRaw == null ? List.of()
-                        : correctRaw.stream().map(Object::toString).toList();
-
-                List<Object> options = (List<Object>) q.get("options");
-
                 // Resolve display number from the order map or fall back to JSON number
                 int displayNumber = 0;
                 if (questionOrderMap != null && questionOrderMap.containsKey(qId)) {
@@ -161,6 +192,32 @@ public class ResultService {
                 } else if (q.get("number") != null) {
                     displayNumber = ((Number) q.get("number")).intValue();
                 }
+
+                // ── Verbal questions are scored by AI asynchronously — skip MCQ logic ──
+                if ("verbal".equalsIgnoreCase(qType)) {
+                    Map<String, Object> verbalDetail = new LinkedHashMap<>();
+                    verbalDetail.put("questionId",     qId);
+                    verbalDetail.put("questionNumber", displayNumber);
+                    verbalDetail.put("questionText",   qText);
+                    verbalDetail.put("questionType",   qType);
+                    verbalDetail.put("options",        null);
+                    verbalDetail.put("correctAnswer",  List.of());
+                    verbalDetail.put("userAnswer",     answerLookup.containsKey(qId) ? "recorded" : null);
+                    verbalDetail.put("correct",        false);
+                    verbalDetail.put("marksAwarded",   0.0);
+                    verbalDetail.put("totalMarks",     marks);
+                    // Stored in AiResult row for sending to the AI API
+                    verbalDetail.put("expectedReply",  q.getOrDefault("expectedReply", ""));
+                    verbalDetail.put("precisionLevel", ((Number) q.getOrDefault("precision", 3)).intValue());
+                    details.add(verbalDetail);
+                    continue; // do NOT accumulate into totalMarks / rawScore
+                }
+
+                List<Object> correctRaw = (List<Object>) q.get("correctAnswer");
+                List<String> correctAnswer = correctRaw == null ? List.of()
+                        : correctRaw.stream().map(Object::toString).toList();
+
+                List<Object> options = (List<Object>) q.get("options");
 
                 List<String> userAnswer = toStringList(answerLookup.get(qId));
                 boolean notAttempted = userAnswer.isEmpty();
@@ -345,13 +402,33 @@ public class ResultService {
 
     @SuppressWarnings("unchecked")
     private String buildQuestionBlock(Map<String, Object> d) {
+        String  qNum  = String.valueOf(d.getOrDefault("questionNumber", "?"));
+        String  qText = esc(String.valueOf(d.getOrDefault("questionText", "")));
+        String  qType = String.valueOf(d.getOrDefault("questionType", "mcq"));
+        Object  totalMarks = d.get("totalMarks");
+
+        // ── Verbal — evaluated asynchronously by AI ──────────────────────────
+        if ("verbal".equalsIgnoreCase(qType)) {
+            return """
+                    <div class='q-block' style='border-color:#f97316'>
+                      <div class='q-header'>
+                        <span class='q-num'>Question %s</span>
+                        <span style='color:#ea580c;font-weight:bold'>&#127908; Verbal</span>
+                        <span class='q-marks'>/ %s pts (AI evaluated)</span>
+                      </div>
+                      <p class='q-text'>%s</p>
+                      <div class='subj'>
+                        <div style='color:#9a3412'>
+                          &#127908; Verbal answer recorded — score will be updated after AI evaluation.
+                        </div>
+                      </div>
+                    </div>
+                    """.formatted(qNum, totalMarks, qText);
+        }
+
         boolean correct      = Boolean.TRUE.equals(d.get("correct"));
         boolean notAttempted = d.get("userAnswer") == null;
         Object  marksAwarded = d.get("marksAwarded");
-        Object  totalMarks   = d.get("totalMarks");
-        String  qNum         = String.valueOf(d.getOrDefault("questionNumber", "?"));
-        String  qText        = esc(String.valueOf(d.getOrDefault("questionText", "")));
-        String  qType        = String.valueOf(d.getOrDefault("questionType", "mcq"));
 
         String badge = correct
                 ? "<span class='badge-correct'>&#10003; Correct</span>"

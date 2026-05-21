@@ -3,8 +3,10 @@ package com.exam.backend.controller;
 import com.exam.backend.dto.ExamRequest;
 import com.exam.backend.dto.GenerateLinkRequest;
 import com.exam.backend.dto.GenerateLinkResponse;
+import com.exam.backend.model.AiResult;
 import com.exam.backend.model.Exam;
 import com.exam.backend.model.ExamResult;
+import com.exam.backend.repository.AiResultRepository;
 import com.exam.backend.repository.ExamResultRepository;
 import com.exam.backend.service.ExamService;
 import com.exam.backend.service.JwtService;
@@ -26,6 +28,7 @@ public class AdminExamController {
     private final ExamService          examService;
     private final JwtService           jwtService;
     private final ExamResultRepository examResultRepository;
+    private final AiResultRepository   aiResultRepository;
 
     @GetMapping
     public List<Exam> list() {
@@ -120,6 +123,46 @@ public class AdminExamController {
                 row.put("startedAt",    r.getStartedAt());
                 row.put("createdAt",    r.getCreatedAt());
                 row.put("checked",      r.isChecked());
+
+                // Verbal AI evaluation records for this submission
+                List<AiResult> aiResults = aiResultRepository.findByExamResult(r);
+                List<Map<String, Object>> aiRows = aiResults.stream().map(ar -> {
+                    Map<String, Object> a = new LinkedHashMap<>();
+                    a.put("id",            ar.getId());
+                    a.put("questionId",    ar.getQuestionId());
+                    a.put("question",      ar.getQuestion());
+                    a.put("precisionLevel", ar.getPrecisionLevel());
+                    a.put("aiScore",       ar.getAiScore());
+                    a.put("maxMarks",      ar.getMaxMarks());
+                    a.put("expectedReply", ar.getExpectedReply());
+                    a.put("audioPath",     ar.getAudioPath());
+                    a.put("initiatedAt",   ar.getInitiatedAt());
+                    a.put("receivedAt",    ar.getReceivedAt());
+                    a.put("status",        ar.getStatus());
+                    // requestCurl and raw response omitted — available via GET /ai-results/{id}/curl
+                    return a;
+                }).collect(Collectors.toList());
+                row.put("aiResults", aiRows);
+
+                // totalScore and totalMaxMarks: computed here so the frontend gets
+                // a single accurate number without any client-side arithmetic.
+                // totalScore  = MCQ score + Σ ai_score (SUCCESS rows only)
+                // totalMaxMarks = MCQ totalMarks + Σ maxMarks (all verbal questions)
+                double verbalScore = aiResults.stream()
+                        .filter(ar -> "SUCCESS".equals(ar.getStatus()) && ar.getAiScore() != null)
+                        .mapToDouble(AiResult::getAiScore)
+                        .sum();
+                double verbalMaxMarks = aiResults.stream()
+                        .filter(ar -> ar.getMaxMarks() != null)
+                        .mapToDouble(AiResult::getMaxMarks)
+                        .sum();
+                double mcqScore    = r.getScore()      != null ? r.getScore()      : 0.0;
+                double mcqMax      = r.getTotalMarks()  != null ? r.getTotalMarks() : 0.0;
+                double totalScore    = Math.round((mcqScore + verbalScore) * 100.0) / 100.0;
+                double totalMaxMarks = mcqMax + verbalMaxMarks;
+                row.put("totalScore",    totalScore);
+                row.put("totalMaxMarks", totalMaxMarks);
+
                 return row;
             }).collect(Collectors.toList());
 
