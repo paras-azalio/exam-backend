@@ -76,6 +76,9 @@ public class VerbalEvaluationService {
     @Value("${verbal.thread-pool-size:10}")
     private int threadPoolSize;
 
+    @Value("${storage.base-path:C:/exam-recordings}")
+    private String storagePath;
+
     private ExecutorService executor;
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
@@ -275,10 +278,8 @@ public class VerbalEvaluationService {
         try {
             String sessionKey = aiResult.getExamResult().getSessionKey(); // eagerly loaded ✓
 
-            // Audio URL accessible by the AI service via admin recordings endpoint
-            String audioUrl = callbackUrl.replaceAll("/api/result/verbal-update.*", "")
-                    + "/api/admin/recordings/file?sessionKey="
-                    + sessionKey + "&filePath=verbal_" + aiResult.getQuestionId() + ".webm";
+            // Absolute path to the audio file — AI is co-located on the same server
+            String audioFilePath = storagePath + "/" + aiResult.getAudioPath();
 
             // Build JSON payload
             Map<String, Object> payload = new LinkedHashMap<>();
@@ -289,7 +290,7 @@ public class VerbalEvaluationService {
             payload.put("expectedReply",  aiResult.getExpectedReply());
             payload.put("precision",      aiResult.getPrecisionLevel());
             payload.put("maxMarks",       aiResult.getMaxMarks());
-            payload.put("audioFileUrl",   audioUrl);
+            payload.put("audioFilePath",  audioFilePath);
             payload.put("callbackUrl",    callbackUrl);
             payload.put("callbackSecret", webhookSecret);
 
@@ -318,12 +319,11 @@ public class VerbalEvaluationService {
             log.info("Verbal eval fired: questionId={} jti={} → HTTP {}",
                      aiResult.getQuestionId(), aiResult.getJti(), resp.statusCode());
 
-//            // Always capture the immediate API response for later analysis
-//            aiResult.setRequestResponse(resp.body());
+            // Always store the raw response for DB analysis
+            aiResult.setResponse(resp.body());
 
             if (resp.statusCode() >= 400) {
                 aiResult.setStatus("FAILED");
-                aiResult.setResponse("HTTP " + resp.statusCode() + ": " + resp.body());
             } else {
                 // Check if the API returned the score inline (e.g. simulate mode)
                 // instead of via a separate webhook callback.
@@ -333,7 +333,6 @@ public class VerbalEvaluationService {
                     if (scoreRaw != null) {
                         double inlineScore = Double.parseDouble(scoreRaw.toString());
                         aiResult.setAiScore(inlineScore);
-                        aiResult.setResponse(resp.body());
                         aiResult.setReceivedAt(LocalDateTime.now());
                         aiResult.setStatus("SUCCESS");
                         log.info("Verbal score applied inline: questionId={} score={}",
