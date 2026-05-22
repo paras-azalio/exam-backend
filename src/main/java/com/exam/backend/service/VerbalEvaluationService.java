@@ -83,6 +83,7 @@ public class VerbalEvaluationService {
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
+            .version(HttpClient.Version.HTTP_1_1)  // uvicorn doesn't support HTTP/2 upgrade
             .build();
 
 
@@ -315,6 +316,8 @@ public class VerbalEvaluationService {
                     .timeout(Duration.ofSeconds(30))
                     .build();
 
+            log.info("Sending to AI: {}", body);
+
             HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
             log.info("Verbal eval fired: questionId={} jti={} → HTTP {}",
                      aiResult.getQuestionId(), aiResult.getJti(), resp.statusCode());
@@ -323,6 +326,7 @@ public class VerbalEvaluationService {
             aiResult.setResponse(resp.body());
 
             if (resp.statusCode() >= 400) {
+                log.error("AI returned {}: {}", resp.statusCode(), resp.body());
                 aiResult.setStatus("FAILED");
             } else {
                 // Check if the API returned the score inline (e.g. simulate mode)
