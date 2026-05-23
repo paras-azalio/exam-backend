@@ -28,4 +28,7 @@ public class SaveResultRequest {
      * when questions or options are shuffled).
      */
     private Map<String, Object> questionOrderMap;
+
+    /** Number of tab-switch / focus-loss violations recorded on the frontend. */
+    private Integer violations;
 }

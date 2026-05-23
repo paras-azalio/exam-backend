@@ -123,6 +123,7 @@ public class AdminExamController {
                 row.put("startedAt",    r.getStartedAt());
                 row.put("createdAt",    r.getCreatedAt());
                 row.put("checked",      r.isChecked());
+                row.put("violations",   r.getViolations());
 
                 // Verbal AI evaluation records for this submission
                 List<AiResult> aiResults = aiResultRepository.findByExamResult(r);
