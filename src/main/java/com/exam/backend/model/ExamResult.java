@@ -55,6 +55,14 @@ public class ExamResult {
     @Column(name = "checked", nullable = false)
     private boolean checked = false;
 
+    /**
+     * jti (JWT ID) from the student's invite token.
+     * Used to identify this result row when the async verbal-evaluation
+     * webhook calls back from FastAPI.
+     */
+    @Column(name = "jti", length = 100)
+    private String jti;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

@@ -13,10 +13,19 @@ public class SaveResultRequest {
     private String jti;
     private String examCode;
     private String examTitle;
-    private Double score;
-    private Double totalMarks;
-    private String grade;
-    private List<Map<String, Object>> details;
     /** ISO-8601 timestamp of when the student began the exam (sent from frontend). */
     private String startedAt;
+
+    /**
+     * Raw student answers — [{questionId: string, answer: string | string[]}].
+     * Scoring is performed server-side; the frontend never sends a pre-computed score.
+     */
+    private List<Map<String, Object>> answers;
+
+    /**
+     * Maps questionId → display number so the HTML report preserves the same
+     * question ordering the student saw (which may differ from the JSON order
+     * when questions or options are shuffled).
+     */
+    private Map<String, Object> questionOrderMap;
 }

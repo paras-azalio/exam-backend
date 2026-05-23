@@ -1,15 +1,19 @@
 package com.exam.backend.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -26,7 +30,10 @@ import java.util.UUID;
  * No verification is needed on the frontend — the server is the only token producer.
  */
 @Service
+@RequiredArgsConstructor
 public class JwtService {
+
+    private final ObjectMapper mapper;
 
     @Value("${jwt.secret}")
     private String secret;
@@ -58,6 +65,52 @@ public class JwtService {
             return FMT.format(Instant.parse(validUntilIso));
         }
         return FMT.format(Instant.now().plusSeconds((long) validForMinutes * 60));
+    }
+
+    /**
+     * Validates an HS256 JWT (signature + expiry + nbf) and returns its decoded payload.
+     * Throws {@link IllegalArgumentException} if the token is invalid, expired, or not yet active.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> verifyAndExtract(String token) {
+        String[] parts = token.split("\\.");
+        if (parts.length != 3) throw new IllegalArgumentException("Invalid token format");
+
+        // Verify signature
+        String data     = parts[0] + "." + parts[1];
+        String expected = sign(data);
+        if (!expected.equals(parts[2])) throw new IllegalArgumentException("Invalid token signature");
+
+        // Decode payload
+        String json;
+        try {
+            json = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid token encoding");
+        }
+
+        Map<String, Object> payload;
+        try {
+            payload = mapper.readValue(json, Map.class);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Invalid token payload");
+        }
+
+        long now = Instant.now().getEpochSecond();
+
+        // Check expiry
+        if (payload.containsKey("exp")) {
+            long exp = ((Number) payload.get("exp")).longValue();
+            if (now > exp) throw new IllegalArgumentException("Token has expired");
+        }
+
+        // Check not-before
+        if (payload.containsKey("nbf")) {
+            long nbf = ((Number) payload.get("nbf")).longValue();
+            if (now < nbf) throw new IllegalArgumentException("Token is not yet active");
+        }
+
+        return payload;
     }
 
     /** Human-readable valid-from label, or null when the token is valid immediately. */
