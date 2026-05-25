@@ -76,9 +76,17 @@ public class AiResult {
     @Column(name = "initiated_at")
     private LocalDateTime initiatedAt;
 
-    /** Raw response body from the AI (acknowledgement or error). */
+    /** Complete JSON response body from the AI callback (includes score, transcript, feedback). */
     @Column(name = "response", columnDefinition = "TEXT")
     private String response;
+
+    /** Whisper transcript of the candidate's verbal answer. Null until SUCCESS. */
+    @Column(name = "transcript", columnDefinition = "TEXT")
+    private String transcript;
+
+    /** AI-generated feedback explaining the score. Null until SUCCESS. */
+    @Column(name = "feedback", columnDefinition = "TEXT")
+    private String feedback;
 
     /** When the webhook callback was received and the score was applied. */
     @Column(name = "received_at")

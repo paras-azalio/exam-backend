@@ -140,6 +140,8 @@ public class AdminExamController {
                     a.put("initiatedAt",   ar.getInitiatedAt());
                     a.put("receivedAt",    ar.getReceivedAt());
                     a.put("status",        ar.getStatus());
+                    a.put("transcript",    ar.getTranscript());
+                    a.put("feedback",      ar.getFeedback());
                     // requestCurl and raw response omitted — available via GET /ai-results/{id}/curl
                     return a;
                 }).collect(Collectors.toList());

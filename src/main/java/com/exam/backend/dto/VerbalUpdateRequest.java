@@ -14,7 +14,9 @@ import lombok.Data;
  *   "score":        "7.5",
  *   "precision":    3,
  *   "maxMarks":     10,
- *   "secret":       "QuickScreenVerbal#2026"
+ *   "secret":       "QuickScreenVerbal#2026",
+ *   "transcript":   "My name is John and I have 5 years of experience...",
+ *   "feedback":     "The candidate correctly identified all key points."
  * }
  *
  * NOTE: questionId is the preferred lookup key. If absent, falls back to questionText.
@@ -33,4 +35,8 @@ public class VerbalUpdateRequest {
     /** Maximum marks for this verbal question. */
     private double maxMarks;
     private String secret;
+    /** Whisper transcript of the candidate's audio answer. */
+    private String transcript;
+    /** One-to-two sentence AI feedback explaining the score. */
+    private String feedback;
 }

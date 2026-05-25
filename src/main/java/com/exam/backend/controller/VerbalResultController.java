@@ -57,12 +57,23 @@ public class VerbalResultController {
             try { score = Double.parseDouble(req.getScore()); }
             catch (Exception e) { log.warn("Could not parse score '{}'; defaulting to 0", req.getScore()); }
 
+            // Build full JSON response string for audit trail
+            String fullJson;
+            try {
+                fullJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(req);
+            } catch (Exception ex) {
+                fullJson = "{\"score\":\"" + req.getScore() + "\"}";
+            }
+
             AiResult updated = verbalEvaluationService.applyVerbalResult(
                     req.getJti(),
                     req.getQuestionId(),
                     req.getQuestionText(),
                     score,
-                    req.getScore(),   // store raw score string as response
+                    fullJson,
+                    req.getTranscript(),
+                    req.getFeedback(),
                     req.getSecret());
 
             return ResponseEntity.ok(Map.of(
@@ -183,7 +194,9 @@ public class VerbalResultController {
             String scoreStr = String.format("%.1f", score);
 
             AiResult updated = verbalEvaluationService.applyVerbalResult(
-                    jti, questionId, questionText, score, scoreStr, secret);
+                    jti, questionId, questionText, score,
+                    "{\"simulated\":true,\"score\":\"" + scoreStr + "\"}",
+                    null, "[Simulated — no real transcript]", secret);
 
             log.info("[SIM] Assigned score {}/{} for questionId='{}' jti={}",
                      scoreStr, maxMarks, questionId, jti);
