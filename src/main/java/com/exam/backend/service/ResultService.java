@@ -11,6 +11,8 @@ import com.exam.backend.repository.ExamResultRepository;
 import com.exam.backend.repository.UsedTokenRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +27,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ResultService {
@@ -43,21 +46,25 @@ public class ResultService {
 
     @SuppressWarnings("unchecked")
     public ScoredResult saveResult(SaveResultRequest req) throws IOException {
+    	log.info("Initiating save result for sessionKey: {}, examCode: {}", req.getSessionKey(), req.getExamCode());
 
         // ── One-time link check ──────────────────────────────────────────────────
         // Allow the save if the sessionKey already exists — this handles the
         // beacon-then-normal-submit race (or vice-versa).  Only reject when a
         // *different* session tries to reuse the same invite token.
         if (req.getJti() != null && !req.getJti().isBlank()) {
+        	log.debug("Checking token usage for JTI: {}", req.getJti());
             if (usedTokenRepository.existsById(req.getJti())) {
                 boolean sameSession = resultRepository.findBySessionKey(req.getSessionKey()).isPresent();
                 if (!sameSession) {
+                	log.warn("Save rejected: Invite link with JTI {} has already been used by a different session", req.getJti());
                     throw new IllegalStateException("This invite link has already been used.");
                 }
             }
         }
 
         // ── Load full exam from DB (correct answers never leave the server) ───────
+        log.debug("Loading full exam data from DB for examCode: {}", req.getExamCode());
         String examJson = examRepository.findByExamCodeIgnoreCase(req.getExamCode())
                 .map(com.exam.backend.model.Exam::getExamData)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -66,6 +73,7 @@ public class ResultService {
         Map<String, Object> examMap = mapper.readValue(examJson, Map.class);
 
         // ── Score answers server-side ─────────────────────────────────────────────
+        log.debug("Scoring student answers server-side");
         List<Map<String, Object>> details = scoreAnswers(
                 examMap, req.getAnswers(), req.getQuestionOrderMap());
 
@@ -80,6 +88,7 @@ public class ResultService {
         }
         double score = Math.max(0, rawScore);
         String grade = resolveGrade(examMap, score, totalMarks);
+        log.info("Scoring complete. Score: {}/{}, Grade: {}", score, totalMarks, grade);
 
         // ── Derive exam title ─────────────────────────────────────────────────────
         String examTitle = (req.getExamTitle() != null && !req.getExamTitle().isBlank())
@@ -87,6 +96,7 @@ public class ResultService {
                 : String.valueOf(examMap.getOrDefault("examTitle", req.getExamCode()));
 
         // ── Write HTML report ─────────────────────────────────────────────────────
+        log.debug("Generating HTML report for sessionKey: {}", req.getSessionKey());
         String htmlPath = writeHtmlReport(
                 req.getSessionKey(), req.getStudentName(),
                 req.getExamCode(), examTitle,
@@ -116,6 +126,7 @@ public class ResultService {
         // on the fly from the ai_result table, so there is nothing to set here.
 
         ExamResult saved = resultRepository.save(result);
+        log.info("Successfully persisted ExamResult with ID: {}", saved.getId());
 
         // ── Create AiResult rows / fire evaluations ───────────────────────────
         // If AiResult rows already exist (created at audio-upload time), the AI
@@ -124,6 +135,8 @@ public class ResultService {
         List<AiResult> aiResultsToFire = new java.util.ArrayList<>();
         boolean anyAiRowsExist = !aiResultRepository.findByExamResult(saved).isEmpty();
         if (!anyAiRowsExist) {
+        	log.debug("No existing AiResult rows found, generating them now for submission");
+        	
             // Legacy / no-JWT path: fire AI from submission as before
             for (Map<String, Object> d : details) {
                 if (!"verbal".equalsIgnoreCase(String.valueOf(d.get("questionType")))) continue;
@@ -147,6 +160,7 @@ public class ResultService {
                 && !usedTokenRepository.existsById(req.getJti())) {
             usedTokenRepository.save(new UsedToken(
                     req.getJti(), req.getExamCode(), req.getStudentEmail(), LocalDateTime.now()));
+            log.info("Marked JTI {} as used", req.getJti());
         }
 
         return new ScoredResult(saved, score, totalMarks, grade, details);
@@ -159,6 +173,7 @@ public class ResultService {
             Map<String, Object> examMap,
             List<Map<String, Object>> rawAnswers,
             Map<String, Object> questionOrderMap) {
+    	log.debug("Processing {} raw answers", rawAnswers != null ? rawAnswers.size() : 0);
 
         // Build lookup: questionId → raw answer value (String or List)
         Map<String, Object> answerLookup = new HashMap<>();
@@ -171,7 +186,10 @@ public class ResultService {
 
         List<Map<String, Object>> details = new ArrayList<>();
         List<Object> sections = (List<Object>) examMap.get("sections");
-        if (sections == null) return details;
+        if (sections == null) {
+        	log.warn("Exam JSON contains no sections");
+        	return details;
+        }
 
         for (Object sectionObj : sections) {
             Map<String, Object> section = (Map<String, Object>) sectionObj;
@@ -297,6 +315,7 @@ public class ResultService {
         try {
             return Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDateTime();
         } catch (Exception e) {
+        	log.warn("Failed to parse startedAt ISO string: {}", iso, e);
             return null;
         }
     }
@@ -400,6 +419,7 @@ public class ResultService {
                 questions);
 
         Files.writeString(file, html, StandardCharsets.UTF_8);
+        log.info("Successfully saved HTML report to: {}", file.toAbsolutePath());
         return file.toAbsolutePath().toString();
     }
 
