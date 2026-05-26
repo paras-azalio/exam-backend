@@ -378,7 +378,9 @@ public class VerbalEvaluationService {
                                       String questionId,
                                       String questionText,
                                       double score,
-                                      String rawResponse,
+                                      String fullJsonResponse,
+                                      String transcript,
+                                      String feedback,
                                       String secret) {
         if (!webhookSecret.equals(secret)) {
             throw new SecurityException("Invalid webhook secret");
@@ -399,13 +401,16 @@ public class VerbalEvaluationService {
 
         // Update AiResult fields only — exam_results is untouched
         ar.setAiScore(score);
-        ar.setResponse(rawResponse);
+        ar.setResponse(fullJsonResponse);   // full callback JSON for audit trail
+        ar.setTranscript(transcript);
+        ar.setFeedback(feedback);
         ar.setReceivedAt(LocalDateTime.now());
         ar.setStatus("SUCCESS");
         aiResultRepository.save(ar);
 
-        log.info("Verbal result recorded: jti={} questionId={} score={}",
-                 jti, ar.getQuestionId(), score);
+        log.info("Verbal result recorded: jti={} questionId={} score={} transcript_len={}",
+                 jti, ar.getQuestionId(), score,
+                 transcript != null ? transcript.length() : 0);
 
         return ar;
     }
