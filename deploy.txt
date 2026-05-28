@@ -1,0 +1,13 @@
+# Kill the running backend
+kill $(cat /home/devteamjava/QuickScreen/backend/app.pid)
+
+# Wait 2 seconds for it to fully stop
+sleep 2
+
+# Start with the new JAR
+nohup java -jar /home/devteamjava/QuickScreen/backend/exam-backend-1.0.0.jar \
+  > /home/devteamjava/QuickScreen/backend/app.log 2>&1 &
+echo $! > /home/devteamjava/QuickScreen/backend/app.pid
+
+# Watch the log
+tail -f /home/devteamjava/QuickScreen/backend/app.log
