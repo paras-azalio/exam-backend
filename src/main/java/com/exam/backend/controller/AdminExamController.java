@@ -146,6 +146,7 @@ public class AdminExamController {
                     return a;
                 }).collect(Collectors.toList());
                 row.put("aiResults", aiRows);
+                row.put("answersJson", r.getAnswersJson());
 
                 // totalScore and totalMaxMarks: computed here so the frontend gets
                 // a single accurate number without any client-side arithmetic.
