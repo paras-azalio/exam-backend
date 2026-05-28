@@ -109,6 +109,9 @@ public class ResultService {
         if (req.getJti() != null && !req.getJti().isBlank()) {
             result.setJti(req.getJti());
         }
+        if (req.getViolations() != null) {
+            result.setViolations(req.getViolations());
+        }
         // totalScore is not stored on exam_results — the admin portal computes it
         // on the fly from the ai_result table, so there is nothing to set here.
 

@@ -123,6 +123,7 @@ public class AdminExamController {
                 row.put("startedAt",    r.getStartedAt());
                 row.put("createdAt",    r.getCreatedAt());
                 row.put("checked",      r.isChecked());
+                row.put("violations",   r.getViolations());
 
                 // Verbal AI evaluation records for this submission
                 List<AiResult> aiResults = aiResultRepository.findByExamResult(r);
@@ -139,6 +140,8 @@ public class AdminExamController {
                     a.put("initiatedAt",   ar.getInitiatedAt());
                     a.put("receivedAt",    ar.getReceivedAt());
                     a.put("status",        ar.getStatus());
+                    a.put("transcript",    ar.getTranscript());
+                    a.put("feedback",      ar.getFeedback());
                     // requestCurl and raw response omitted — available via GET /ai-results/{id}/curl
                     return a;
                 }).collect(Collectors.toList());

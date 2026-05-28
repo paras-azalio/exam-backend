@@ -55,6 +55,10 @@ public class ExamResult {
     @Column(name = "checked", nullable = false)
     private boolean checked = false;
 
+    /** Number of tab-switch / focus-loss violations recorded during the exam. */
+    @Column(name = "violations")
+    private Integer violations;
+
     /**
      * jti (JWT ID) from the student's invite token.
      * Used to identify this result row when the async verbal-evaluation
