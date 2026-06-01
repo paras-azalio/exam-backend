@@ -60,6 +60,17 @@ public class ExamResult {
     private Integer violations;
 
     /**
+     * Full per-question scoring details serialised as JSON array.
+     * Each element: { questionId, questionNumber, questionText, questionType,
+     *                 options, correctAnswer, userAnswer, correct,
+     *                 marksAwarded, totalMarks }
+     * Verbal entries are included with questionType="verbal".
+     * Stored so the admin report can reconstruct per-candidate MCQ breakdowns.
+     */
+    @Column(name = "answers_json", columnDefinition = "LONGTEXT")
+    private String answersJson;
+
+    /**
      * jti (JWT ID) from the student's invite token.
      * Used to identify this result row when the async verbal-evaluation
      * webhook calls back from FastAPI.

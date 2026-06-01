@@ -112,6 +112,10 @@ public class ResultService {
         if (req.getViolations() != null) {
             result.setViolations(req.getViolations());
         }
+        // Persist per-question MCQ breakdown so admin report can display it
+        try {
+            result.setAnswersJson(mapper.writeValueAsString(details));
+        } catch (Exception ignored) { /* non-critical — report falls back gracefully */ }
         // totalScore is not stored on exam_results — the admin portal computes it
         // on the fly from the ai_result table, so there is nothing to set here.
 
