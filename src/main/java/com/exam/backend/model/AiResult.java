@@ -60,10 +60,14 @@ public class AiResult {
     @Column(name = "expected_reply", columnDefinition = "TEXT")
     private String expectedReply;
 
-    /** Relative path to the audio file: {sessionKey}/verbal_{questionId}.webm */
-    @Column(name = "audio_path", length = 500)
-    private String audioPath;
+ // ADD these two:
+    @Column(name = "input_text", columnDefinition = "TEXT")
+    private String inputText;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", length = 20, nullable = false)
+    private AiResultType type = AiResultType.VERBAL;
+    
     /** Full curl command for the AI API call — useful for manual debugging / retry. */
     @Column(name = "request_curl", columnDefinition = "TEXT")
     private String requestCurl;

@@ -3,6 +3,7 @@ package com.exam.backend.service;
 import com.exam.backend.dto.SaveResultRequest;
 import com.exam.backend.dto.ScoredResult;
 import com.exam.backend.model.AiResult;
+import com.exam.backend.model.AiResultType;
 import com.exam.backend.model.ExamResult;
 import com.exam.backend.model.UsedToken;
 import com.exam.backend.repository.AiResultRepository;
@@ -143,7 +144,8 @@ public class ResultService {
         	
             // Legacy / no-JWT path: fire AI from submission as before
             for (Map<String, Object> d : details) {
-                if (!"verbal".equalsIgnoreCase(String.valueOf(d.get("questionType")))) continue;
+            	String quesType = String.valueOf(d.get("questionType"));
+            	if (!"verbal".equalsIgnoreCase(quesType) && !"subjective".equalsIgnoreCase(quesType)) continue;
                 AiResult ar = new AiResult();
                 ar.setExamResult(saved);
                 ar.setJti(saved.getJti());
@@ -152,7 +154,15 @@ public class ResultService {
                 ar.setMaxMarks(((Number) d.get("totalMarks")).doubleValue());
                 ar.setExpectedReply(String.valueOf(d.getOrDefault("expectedReply", "")));
                 ar.setPrecisionLevel(((Number) d.getOrDefault("precisionLevel", 3)).intValue());
-                ar.setAudioPath(saved.getSessionKey() + "/verbal_" + d.get("questionId") + ".webm");
+                if ("verbal".equalsIgnoreCase(quesType)) {
+                    ar.setInputText(saved.getSessionKey() + "/verbal_" + d.get("questionId") + ".webm");
+                    ar.setType(AiResultType.VERBAL);	
+                } else {
+                    // subjective — store the candidate's typed answer
+                    Object userAns = d.get("userAnswer");
+                    ar.setInputText(userAns != null ? userAns.toString() : "");
+                    ar.setType(AiResultType.SUBJECTIVE);
+                }
                 ar.setStatus("PENDING");
                 aiResultsToFire.add(aiResultRepository.save(ar));
             }
@@ -237,7 +247,26 @@ public class ResultService {
                     details.add(verbalDetail);
                     continue; // do NOT accumulate into totalMarks / rawScore
                 }
-
+                
+                if ("subjective".equalsIgnoreCase(qType)) {
+                    Map<String, Object> subjDetail = new LinkedHashMap<>();
+                    subjDetail.put("questionId",     qId);
+                    subjDetail.put("questionNumber", displayNumber);
+                    subjDetail.put("questionText",   qText);
+                    subjDetail.put("questionType",   qType);
+                    subjDetail.put("options",        null);
+                    subjDetail.put("correctAnswer",  List.of());
+                    Object userAns = answerLookup.get(qId);
+                    subjDetail.put("userAnswer",     userAns != null ? userAns.toString() : null);
+                    subjDetail.put("correct",        false);
+                    subjDetail.put("marksAwarded",   0.0);
+                    subjDetail.put("totalMarks",     marks);
+                    subjDetail.put("expectedReply",  q.getOrDefault("expectedReply", ""));
+                    subjDetail.put("precisionLevel", ((Number) q.getOrDefault("precision", 3)).intValue());
+                    details.add(subjDetail);
+                    continue; // do NOT accumulate into totalMarks / rawScore
+                }
+                
                 List<Object> correctRaw = (List<Object>) q.get("correctAnswer");
                 List<String> correctAnswer = correctRaw == null ? List.of()
                         : correctRaw.stream().map(Object::toString).toList();

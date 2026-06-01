@@ -156,7 +156,8 @@ public class AdminExamController {
                     a.put("aiScore",       ar.getAiScore());
                     a.put("maxMarks",      ar.getMaxMarks());
                     a.put("expectedReply", ar.getExpectedReply());
-                    a.put("audioPath",     ar.getAudioPath());
+                    a.put("inputText", ar.getInputText());
+                    a.put("type",      ar.getType());
                     a.put("initiatedAt",   ar.getInitiatedAt());
                     a.put("receivedAt",    ar.getReceivedAt());
                     a.put("status",        ar.getStatus());
