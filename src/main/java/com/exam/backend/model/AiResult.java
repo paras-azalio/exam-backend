@@ -1,5 +1,6 @@
 package com.exam.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -30,6 +31,7 @@ public class AiResult {
     /** Parent result row. Many verbal questions → one exam result. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "exam_result_id", nullable = false)
+    @JsonIgnore   // prevents back-reference recursion / lazy-load when serialised
     private ExamResult examResult;
 
     /** JWT token ID — used to correlate the webhook callback. */
