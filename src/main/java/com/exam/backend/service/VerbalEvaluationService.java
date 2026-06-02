@@ -295,7 +295,7 @@ public class VerbalEvaluationService {
             if (AiResultType.SUBJECTIVE.equals(aiResult.getType())) {
                 payload.put("inputText", aiResult.getInputText());
             } else {
-                payload.put("audioFilePath", aiResult.getInputText()); // inputText holds the path for verbal
+                payload.put("audioFilePath", storagePath + "/" + aiResult.getInputText());
             }
             payload.put("type", aiResult.getType());          
             payload.put("callbackUrl",    callbackUrl);
