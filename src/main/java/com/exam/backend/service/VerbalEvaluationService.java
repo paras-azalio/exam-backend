@@ -297,7 +297,8 @@ public class VerbalEvaluationService {
             } else {
                 payload.put("audioFilePath", aiResult.getInputText()); // inputText holds the path for verbal
             }
-            payload.put("type", aiResult.getType());            payload.put("callbackUrl",    callbackUrl);
+            payload.put("type", aiResult.getType());          
+            payload.put("callbackUrl",    callbackUrl);
             payload.put("callbackSecret", webhookSecret);
 
             String body = mapper.writeValueAsString(payload);

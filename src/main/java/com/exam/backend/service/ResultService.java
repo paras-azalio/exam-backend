@@ -82,7 +82,8 @@ public class ResultService {
         double totalMarks = 0;
         double rawScore   = 0;
         for (Map<String, Object> d : details) {
-            if (!"verbal".equalsIgnoreCase(String.valueOf(d.get("questionType")))) {
+            String qt = String.valueOf(d.get("questionType"));
+            if (!"verbal".equalsIgnoreCase(qt) && !"subjective".equalsIgnoreCase(qt)) {
                 totalMarks += ((Number) d.get("totalMarks")).doubleValue();
                 rawScore   += ((Number) d.get("marksAwarded")).doubleValue();
             }
@@ -132,41 +133,44 @@ public class ResultService {
 
         ExamResult saved = resultRepository.save(result);
         log.info("Successfully persisted ExamResult with ID: {}", saved.getId());
-
-        // ── Create AiResult rows / fire evaluations ───────────────────────────
-        // If AiResult rows already exist (created at audio-upload time), the AI
-        // was already fired; we just recompute the total to absorb any scores
-        // that arrived while the student was finishing the rest of the exam.
+        
         List<AiResult> aiResultsToFire = new java.util.ArrayList<>();
-        boolean anyAiRowsExist = !aiResultRepository.findByExamResult(saved).isEmpty();
-        if (!anyAiRowsExist) {
-        	log.debug("No existing AiResult rows found, generating them now for submission");
-        	
-            // Legacy / no-JWT path: fire AI from submission as before
-            for (Map<String, Object> d : details) {
-            	String quesType = String.valueOf(d.get("questionType"));
-            	if (!"verbal".equalsIgnoreCase(quesType) && !"subjective".equalsIgnoreCase(quesType)) continue;
-                AiResult ar = new AiResult();
-                ar.setExamResult(saved);
-                ar.setJti(saved.getJti());
-                ar.setQuestionId(String.valueOf(d.get("questionId")));
-                ar.setQuestion(String.valueOf(d.get("questionText")));
-                ar.setMaxMarks(((Number) d.get("totalMarks")).doubleValue());
-                ar.setExpectedReply(String.valueOf(d.getOrDefault("expectedReply", "")));
-                ar.setPrecisionLevel(((Number) d.getOrDefault("precisionLevel", 3)).intValue());
-                if ("verbal".equalsIgnoreCase(quesType)) {
-                    ar.setInputText(saved.getSessionKey() + "/verbal_" + d.get("questionId") + ".webm");
-                    ar.setType(AiResultType.VERBAL);	
-                } else {
-                    // subjective — store the candidate's typed answer
-                    Object userAns = d.get("userAnswer");
-                    ar.setInputText(userAns != null ? userAns.toString() : "");
-                    ar.setType(AiResultType.SUBJECTIVE);
-                }
-                ar.setStatus("PENDING");
-                aiResultsToFire.add(aiResultRepository.save(ar));
-            }
-        }
+//      Gets IDs of existing rows (verbal uploaded earlier)
+//      Loops through all questions
+//      Creates rows only for questions that don't already have one
+//      Subjective rows now get created even if verbal rows already exist
+     // Collect questionIds that already have AiResult rows
+     List<String> existingQuestionIds = aiResultRepository.findByExamResult(saved)
+             .stream()
+             .map(AiResult::getQuestionId)
+             .toList();
+     // Always loop — only create rows that don't already exist
+     for (Map<String, Object> d : details) {
+         String quesType = String.valueOf(d.get("questionType"));
+         if (!"verbal".equalsIgnoreCase(quesType) && !"subjective".equalsIgnoreCase(quesType)) continue;
+
+         String questionId = String.valueOf(d.get("questionId"));
+         if (existingQuestionIds.contains(questionId)) continue; // skip if already created at audio upload
+
+         AiResult ar = new AiResult();
+         ar.setExamResult(saved);
+         ar.setJti(saved.getJti());
+         ar.setQuestionId(questionId);
+         ar.setQuestion(String.valueOf(d.get("questionText")));
+         ar.setMaxMarks(((Number) d.get("totalMarks")).doubleValue());
+         ar.setExpectedReply(String.valueOf(d.getOrDefault("expectedReply", "")));
+         ar.setPrecisionLevel(((Number) d.getOrDefault("precisionLevel", 3)).intValue());
+         if ("verbal".equalsIgnoreCase(quesType)) {
+             ar.setInputText(saved.getSessionKey() + "/verbal_" + questionId + ".webm");
+             ar.setType(AiResultType.VERBAL);
+         } else {
+             Object userAns = d.get("userAnswer");
+             ar.setInputText(userAns != null ? userAns.toString() : "");
+             ar.setType(AiResultType.SUBJECTIVE);
+         }
+         ar.setStatus("PENDING");
+         aiResultsToFire.add(aiResultRepository.save(ar));
+     }
         verbalEvaluationService.fireVerbalEvaluations(aiResultsToFire);
 
         // ── Mark token as used (idempotent) ──────────────────────────────────────
