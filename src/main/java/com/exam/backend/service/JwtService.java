@@ -2,6 +2,8 @@ package com.exam.backend.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +31,8 @@ import java.util.UUID;
  * The frontend simply base64url-decodes the middle segment to read the payload.
  * No verification is needed on the frontend — the server is the only token producer.
  */
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class JwtService {
@@ -55,7 +59,9 @@ public class JwtService {
      */
     public String generateLink(String userName, String userEmail, String examCode,
                                int validForMinutes, String validFromIso, String validUntilIso) {
+    	log.info("Generating JWT invite link for userEmail: '{}', examCode: '{}'", userEmail, examCode);
         String token = buildToken(userName, userEmail, examCode, validForMinutes, validFromIso, validUntilIso);
+        log.debug("Successfully generated JWT invite link for userEmail: '{}'", userEmail);
         return frontendUrl.replaceAll("/$", "") + "/?usr=" + token;
     }
 
@@ -73,19 +79,27 @@ public class JwtService {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> verifyAndExtract(String token) {
+    	log.debug("Verifying JWT token");
         String[] parts = token.split("\\.");
-        if (parts.length != 3) throw new IllegalArgumentException("Invalid token format");
+        if (parts.length != 3) {
+        	log.warn("JWT verification failed: Invalid token format (expected 3 parts, got {})", parts.length);
+        	throw new IllegalArgumentException("Invalid token format");
+        }
 
         // Verify signature
         String data     = parts[0] + "." + parts[1];
         String expected = sign(data);
-        if (!expected.equals(parts[2])) throw new IllegalArgumentException("Invalid token signature");
+        if (!expected.equals(parts[2])) {
+        	log.warn("JWT verification failed: Invalid token signature");
+        	throw new IllegalArgumentException("Invalid token signature");
+        }
 
         // Decode payload
         String json;
         try {
             json = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
         } catch (Exception e) {
+        	log.error("JWT verification failed: Invalid token encoding", e);
             throw new IllegalArgumentException("Invalid token encoding");
         }
 
@@ -93,6 +107,7 @@ public class JwtService {
         try {
             payload = mapper.readValue(json, Map.class);
         } catch (IOException e) {
+        	log.error("JWT verification failed: Invalid token payload", e);
             throw new IllegalArgumentException("Invalid token payload");
         }
 
@@ -101,15 +116,21 @@ public class JwtService {
         // Check expiry
         if (payload.containsKey("exp")) {
             long exp = ((Number) payload.get("exp")).longValue();
-            if (now > exp) throw new IllegalArgumentException("Token has expired");
+            if (now > exp) {
+            	log.warn("JWT verification failed: Token has expired (exp: {}, now: {})", exp, now);
+            	throw new IllegalArgumentException("Token has expired");
+            }
         }
 
         // Check not-before
         if (payload.containsKey("nbf")) {
             long nbf = ((Number) payload.get("nbf")).longValue();
-            if (now < nbf) throw new IllegalArgumentException("Token is not yet active");
+            if (now < nbf) {
+            	log.warn("JWT verification failed: Token is not yet active (nbf: {}, now: {})", nbf, now);
+            	throw new IllegalArgumentException("Token is not yet active");
+            }
         }
-
+        log.debug("JWT token successfully verified for sub: {}", payload.get("sub"));
         return payload;
     }
 
@@ -168,6 +189,7 @@ public class JwtService {
             return Base64.getUrlEncoder().withoutPadding()
                          .encodeToString(mac.doFinal(data.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
+        	log.error("Failed to sign JWT data", e);
             throw new RuntimeException("JWT signing failed", e);
         }
     }

@@ -1,21 +1,5 @@
 package com.exam.backend.service;
 
-import com.exam.backend.model.AiResult;
-import com.exam.backend.model.ExamResult;
-import com.exam.backend.repository.AiResultRepository;
-import com.exam.backend.repository.ExamRepository;
-import com.exam.backend.repository.ExamResultRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
-import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -28,6 +12,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import com.exam.backend.model.AiResult;
+import com.exam.backend.model.AiResultType;
+import com.exam.backend.model.ExamResult;
+import com.exam.backend.repository.AiResultRepository;
+import com.exam.backend.repository.ExamRepository;
+import com.exam.backend.repository.ExamResultRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Manages the full lifecycle of verbal AI evaluations.
@@ -231,7 +234,8 @@ public class VerbalEvaluationService {
                     a.setMaxMarks(((Number) meta.getOrDefault("marks", 0)).doubleValue());
                     a.setExpectedReply(String.valueOf(meta.getOrDefault("expectedReply", "")));
                     a.setPrecisionLevel(((Number) meta.getOrDefault("precision", 3)).intValue());
-                    a.setAudioPath(sessionKey + "/verbal_" + questionId + ".webm");
+                    a.setInputText(sessionKey + "/verbal_" + questionId + ".webm");
+                    a.setType(AiResultType.VERBAL);
                     a.setStatus("PENDING");
                     return aiResultRepository.save(a);
                 });
@@ -279,9 +283,6 @@ public class VerbalEvaluationService {
         try {
             String sessionKey = aiResult.getExamResult().getSessionKey(); // eagerly loaded ✓
 
-            // Absolute path to the audio file — AI is co-located on the same server
-            String audioFilePath = storagePath + "/" + aiResult.getAudioPath();
-
             // Build JSON payload
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("jti",            aiResult.getJti());
@@ -291,7 +292,12 @@ public class VerbalEvaluationService {
             payload.put("expectedReply",  aiResult.getExpectedReply());
             payload.put("precision",      aiResult.getPrecisionLevel());
             payload.put("maxMarks",       aiResult.getMaxMarks());
-            payload.put("audioFilePath",  audioFilePath);
+            if (AiResultType.SUBJECTIVE.equals(aiResult.getType())) {
+                payload.put("inputText", aiResult.getInputText());
+            } else {
+                payload.put("audioFilePath", storagePath + "/" + aiResult.getInputText());
+            }
+            payload.put("type", aiResult.getType());          
             payload.put("callbackUrl",    callbackUrl);
             payload.put("callbackSecret", webhookSecret);
 

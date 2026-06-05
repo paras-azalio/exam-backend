@@ -2,12 +2,15 @@ package com.exam.backend.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.util.Base64;
 
+@Slf4j
 @Component
 public class AdminAuthInterceptor implements HandlerInterceptor {
 
@@ -31,11 +34,15 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
                 if (parts.length == 2
                         && adminUsername.equals(parts[0])
                         && adminPassword.equals(parts[1])) {
+                	log.trace("Admin successfully authenticated for URI: {}", request.getRequestURI());
                     return true;
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            	log.warn("Exception during Basic Auth decoding: {}", ignored.getMessage());
+            }
         }
-
+        
+        log.warn("Admin authentication failed for URI: {}", request.getRequestURI());
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setHeader("WWW-Authenticate", "Basic realm=\"QuickScreen Admin\"");
         response.setContentType("application/json");

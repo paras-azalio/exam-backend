@@ -1,14 +1,17 @@
 package com.exam.backend.config;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.util.ArrayList;
-import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Configuration
 public class CorsConfig {
 
@@ -25,6 +28,7 @@ public class CorsConfig {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
+            	CorsConfig.log.info("Initializing custom CORS mappings for allowed origins");
                 List<String> origins = new ArrayList<>();
                 if (corsOrigins != null && !corsOrigins.isBlank()) {
                     for (String o : corsOrigins.split(",")) {

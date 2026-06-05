@@ -4,6 +4,8 @@ import com.exam.backend.repository.ExamResultRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +15,7 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
@@ -30,11 +33,16 @@ public class AdminResultController {
     @PatchMapping("/results/{id}/check")
     public ResponseEntity<Void> updateCheck(@PathVariable Long id,
                                             @RequestBody Map<String, Boolean> body) {
+    	log.info("Updating check status for result ID: {}", id);
         var opt = examResultRepository.findById(id);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty()) {
+        	log.warn("Result ID {} not found for check update", id);
+        	return ResponseEntity.notFound().build();
+        }
         var result = opt.get();
         result.setChecked(Boolean.TRUE.equals(body.get("checked")));
         examResultRepository.save(result);
+        log.info("Successfully updated check status for result ID: {}", id);
         return ResponseEntity.ok().build();
     }
 
@@ -48,8 +56,12 @@ public class AdminResultController {
      */
     @GetMapping("/results/{resultId}/recordings")
     public ResponseEntity<?> listRecordings(@PathVariable Long resultId) {
+    	log.info("Listing recordings for result ID: {}", resultId);
         var opt = examResultRepository.findById(resultId);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty()) {
+        	log.warn("Result ID {} not found", resultId);
+        	return ResponseEntity.notFound().build();
+        }
 
         String sessionKey = opt.get().getSessionKey();
         Path   sessionDir = Paths.get(basePath, sessionKey).normalize();
@@ -58,6 +70,7 @@ public class AdminResultController {
         resp.put("sessionKey", sessionKey);
 
         if (!Files.exists(sessionDir)) {
+        	log.warn("Session directory does not exist for sessionKey: {}", sessionKey);	
             resp.put("html",   null);
             resp.put("camera", List.of());
             resp.put("screen", List.of());
@@ -69,7 +82,7 @@ public class AdminResultController {
         resp.put("camera", listChunks(sessionDir.resolve("camera")));
         resp.put("screen", listChunks(sessionDir.resolve("screen")));
         resp.put("verbal", listVerbalFiles(sessionDir));
-
+        log.debug("Successfully listed recordings for sessionKey: {}", sessionKey);
         return ResponseEntity.ok(resp);
     }
 
@@ -90,12 +103,21 @@ public class AdminResultController {
                           @RequestParam String filePath,
                           HttpServletRequest request,
                           HttpServletResponse response) throws IOException {
+    	log.debug("Request to serve file: {} for sessionKey: {}", filePath, sessionKey);
 
         // Prevent path traversal
         Path base = Paths.get(basePath).normalize();
         Path file = base.resolve(sessionKey).resolve(filePath).normalize();
-        if (!file.startsWith(base)) { response.sendError(403, "Forbidden"); return; }
-        if (!Files.exists(file) || Files.isDirectory(file)) { response.sendError(404, "Not found"); return; }
+        if (!file.startsWith(base)) { 
+        	log.warn("Path traversal attempt detected for file: {} and sessionKey: {}", filePath, sessionKey);
+        	response.sendError(403, "Forbidden");
+        	return; 
+        	}
+        if (!Files.exists(file) || Files.isDirectory(file)) { 
+        	log.warn("File not found or is a directory: {}", file);
+        	response.sendError(404, "Not found");
+        	return; 
+        	}
 
         String name = file.getFileName().toString();
         String ct   = name.endsWith(".webm") ? "video/webm"
@@ -148,12 +170,19 @@ public class AdminResultController {
 
     @DeleteMapping("/results/{resultId}/folder")
     public ResponseEntity<Void> deleteFolder(@PathVariable Long resultId) {
+    	log.info("Request to delete folder for result ID: {}", resultId);
         var opt = examResultRepository.findById(resultId);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty()) { 
+        	log.warn("Result ID {} not found for folder deletion", resultId);
+        	return ResponseEntity.notFound().build();
+        	}
 
         Path base = Paths.get(basePath).normalize();
         Path dir  = base.resolve(opt.get().getSessionKey()).normalize();
-        if (!dir.startsWith(base)) return ResponseEntity.status(403).build();
+        if (!dir.startsWith(base)) {
+        	log.warn("Path traversal attempt detected during folder deletion for result ID: {}", resultId);
+        	return ResponseEntity.status(403).build();
+        }
 
         try {
             if (Files.exists(dir)) {
@@ -162,8 +191,10 @@ public class AdminResultController {
                         .forEach(p -> { try { Files.delete(p); } catch (IOException ignored) {} });
                 }
             }
+            log.info("Successfully deleted folder for result ID: {}", resultId);
             return ResponseEntity.ok().build();
         } catch (IOException e) {
+        	log.error("Failed to delete folder for result ID: {}", resultId, e);
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -180,6 +211,7 @@ public class AdminResultController {
                          .sorted()                          // ascending → play in order
                          .collect(Collectors.toList());
         } catch (IOException e) {
+        	log.error("Error listing chunks in directory: {}", dir, e);
             return List.of();
         }
     }
@@ -195,6 +227,7 @@ public class AdminResultController {
                     .sorted()
                     .collect(Collectors.toList());
         } catch (IOException e) {
+        	log.error("Error listing verbal files in directory: {}", sessionDir, e);
             return List.of();
         }
     }
