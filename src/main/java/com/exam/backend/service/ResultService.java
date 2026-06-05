@@ -502,10 +502,14 @@ public class ResultService {
 
         if ("subjective".equalsIgnoreCase(qType)) {
             String userAns = formatAnswer(d.get("userAnswer"));
-            String corrAns = formatAnswer(d.get("correctAnswer"));
+            // correctAnswer is always empty for subjective (AI-scored); use expectedReply instead
+            Object expectedReplyObj = d.get("expectedReply");
+            String corrAns = (expectedReplyObj != null && !expectedReplyObj.toString().isBlank())
+                    ? expectedReplyObj.toString()
+                    : formatAnswer(d.get("correctAnswer"));
             body.append("<div class='subj'>")
                 .append("<div><strong>Your answer:</strong> ").append(esc(userAns)).append("</div>")
-                .append("<div class='correct-hint'><strong>Correct answer:</strong> ")
+                .append("<div class='correct-hint'><strong>Expected answer:</strong> ")
                 .append(esc(corrAns)).append("</div>")
                 .append("</div>");
         } else {
