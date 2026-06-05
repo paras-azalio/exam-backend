@@ -501,13 +501,16 @@ public class ResultService {
         StringBuilder body = new StringBuilder();
 
         if ("subjective".equalsIgnoreCase(qType)) {
-            String userAns = formatAnswer(d.get("userAnswer"));
-            String corrAns = formatAnswer(d.get("correctAnswer"));
+            String userAns     = formatAnswer(d.get("userAnswer"));
+            String expectedAns = d.get("expectedReply") != null && !d.get("expectedReply").toString().isBlank()
+                    ? d.get("expectedReply").toString()
+                    : formatAnswer(d.get("correctAnswer"));
             body.append("<div class='subj'>")
                 .append("<div><strong>Your answer:</strong> ").append(esc(userAns)).append("</div>")
-                .append("<div class='correct-hint'><strong>Correct answer:</strong> ")
-                .append(esc(corrAns)).append("</div>")
+                .append("<div class='correct-hint'><strong>Expected answer:</strong> ")
+                .append(esc(expectedAns)).append("</div>")
                 .append("</div>");
+        
         } else {
             List<Object> options    = (List<Object>) d.get("options");
             List<String> correctIds = toStringList(d.get("correctAnswer"));
