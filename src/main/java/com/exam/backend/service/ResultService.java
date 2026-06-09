@@ -124,6 +124,13 @@ public class ResultService {
         if (req.getViolations() != null) {
             result.setViolations(req.getViolations());
         }
+        // --- GAZE TRACKING START ---
+        try {
+            result.setGazeEvents(req.getGazeEvents() != null
+                    ? mapper.writeValueAsString(req.getGazeEvents())
+                    : null);
+        } catch (Exception ignored) { /* non-critical — admin view simply shows no gaze data */ }
+        // --- GAZE TRACKING END ---
         // Persist per-question MCQ breakdown so admin report can display it
         try {
             result.setAnswersJson(mapper.writeValueAsString(details));

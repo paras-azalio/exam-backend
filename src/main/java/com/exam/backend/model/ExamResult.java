@@ -70,6 +70,12 @@ public class ExamResult {
     @Column(name = "answers_json", columnDefinition = "LONGTEXT")
     private String answersJson;
 
+    // --- GAZE TRACKING START ---
+    /** JSON array of client-side gaze / face tracking events captured during the exam. */
+    @Column(name = "gaze_events", columnDefinition = "TEXT")
+    private String gazeEvents;
+    // --- GAZE TRACKING END ---
+
     /**
      * jti (JWT ID) from the student's invite token.
      * Used to identify this result row when the async verbal-evaluation

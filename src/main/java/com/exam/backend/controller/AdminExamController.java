@@ -144,6 +144,9 @@ public class AdminExamController {
                 row.put("createdAt",    r.getCreatedAt());
                 row.put("checked",      r.isChecked());
                 row.put("violations",   r.getViolations());
+                // --- GAZE TRACKING START ---
+                row.put("gazeEvents",   r.getGazeEvents());
+                // --- GAZE TRACKING END ---
 
                 // Verbal AI evaluation records for this submission
                 List<AiResult> aiResults = aiResultRepository.findByExamResult(r);
