@@ -7,6 +7,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -289,13 +290,20 @@ public class VerbalEvaluationService {
             payload.put("sessionKey",     sessionKey);
             payload.put("questionId",     aiResult.getQuestionId());
             payload.put("questionText",   aiResult.getQuestion());
-            payload.put("expectedReply",  aiResult.getExpectedReply());
+            if (AiResultType.SUBJECTIVE.equals(aiResult.getType())) {
+                List<String> expectedList = Arrays.asList(
+                    aiResult.getExpectedReply().split("\\|\\|\\|")
+                );
+                payload.put("expectedReply", expectedList);
+            } else {
+                payload.put("expectedReply", aiResult.getExpectedReply());
+            }
             payload.put("precision",      aiResult.getPrecisionLevel());
             payload.put("maxMarks",       aiResult.getMaxMarks());
             if (AiResultType.SUBJECTIVE.equals(aiResult.getType())) {
                 payload.put("inputText", aiResult.getInputText());
             } else {
-                payload.put("audioFilePath", storagePath + "/" + aiResult.getInputText());
+            	payload.put("audioFilePath", storagePath + "/" + aiResult.getInputText());
             }
             payload.put("type", aiResult.getType());          
             payload.put("callbackUrl",    callbackUrl);
