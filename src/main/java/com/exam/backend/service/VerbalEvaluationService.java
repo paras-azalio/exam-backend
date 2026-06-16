@@ -14,7 +14,9 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -67,6 +69,10 @@ public class VerbalEvaluationService {
     private final ExamRepository       examRepository;
     private final JwtService           jwtService;
     private final ObjectMapper         mapper;
+    @Autowired
+    @Lazy
+    private ResultService resultService;
+
 
     @Value("${verbal.api-url:}")
     private String verbalApiUrl;
@@ -425,6 +431,27 @@ public class VerbalEvaluationService {
         log.info("Verbal result recorded: jti={} questionId={} score={} transcript_len={}",
                  jti, ar.getQuestionId(), score,
                  transcript != null ? transcript.length() : 0);
+     // ── Regenerate HTML report if all questions for this session are now evaluated ──
+        try {
+            ExamResult examResult = ar.getExamResult();
+            if (examResult == null) {
+                // Reload with eager fetch since examResult may be lazily loaded
+                examResult = aiResultRepository.findByIdEager(ar.getId())
+                        .map(AiResult::getExamResult).orElse(null);
+            }
+            if (examResult != null) {
+                List<AiResult> allAiResults = aiResultRepository.findByExamResult(examResult);
+                boolean allDone = !allAiResults.isEmpty() && allAiResults.stream()
+                        .allMatch(a -> "SUCCESS".equals(a.getStatus()) || "FAILED".equals(a.getStatus()));
+                if (allDone) {
+                    log.info("All AI evaluations complete for sessionKey={} — regenerating HTML report",
+                             examResult.getSessionKey());
+                    resultService.regenerateHtmlReport(examResult, allAiResults);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("applyVerbalResult: HTML regeneration failed for jti={}: {}", jti, e.getMessage(), e);
+        }
 
         return ar;
     }
