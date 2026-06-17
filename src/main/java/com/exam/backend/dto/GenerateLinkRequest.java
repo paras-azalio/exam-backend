@@ -12,4 +12,11 @@ public class GenerateLinkRequest {
     private String validFromIso;
     /** ISO-8601 UTC datetime for the expiry (exp claim). Overrides validForMinutes when present. Nullable. */
     private String validUntilIso;
+    /**
+     * When true, the generated JWT will include a "requireSeb": true claim.
+     * The frontend checks this claim and blocks access if the candidate is not
+     * running inside Safe Exam Browser.
+     * Only relevant for .seb config generation — normal generate-link ignores this.
+     */
+    private boolean sebRequired;
 }
