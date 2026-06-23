@@ -71,8 +71,24 @@ public class JwtService {
     public String generateLink(String userName, String userEmail, String examCode,
                                int validForMinutes, String validFromIso, String validUntilIso,
                                boolean sebRequired) {
-    	log.info("Generating JWT invite link for userEmail: '{}', examCode: '{}', sebRequired: {}", userEmail, examCode, sebRequired);
-        String token = buildToken(userName, userEmail, examCode, validForMinutes, validFromIso, validUntilIso, sebRequired);
+        return generateLink(userName, userEmail, examCode, validForMinutes,
+                validFromIso, validUntilIso, sebRequired, false);
+    }
+
+    /**
+     * Generates a signed invite link with optional SEB-required and live-stream flags.
+     *
+     * @param sebRequired  when true, adds "requireSeb":true to the JWT payload
+     * @param liveStream   when true, adds "liveStream":true so the frontend opens a
+     *                     WebSocket and streams camera + screen to HR Admins in real time
+     */
+    public String generateLink(String userName, String userEmail, String examCode,
+                               int validForMinutes, String validFromIso, String validUntilIso,
+                               boolean sebRequired, boolean liveStream) {
+    	log.info("Generating JWT invite link for userEmail: '{}', examCode: '{}', sebRequired: {}, liveStream: {}",
+                userEmail, examCode, sebRequired, liveStream);
+        String token = buildToken(userName, userEmail, examCode, validForMinutes,
+                validFromIso, validUntilIso, sebRequired, liveStream);
         log.debug("Successfully generated JWT invite link for userEmail: '{}'", userEmail);
         return frontendUrl.replaceAll("/$", "") + "/?usr=" + token;
     }
@@ -162,6 +178,13 @@ public class JwtService {
     private String buildToken(String userName, String userEmail, String examCode,
                               int validForMinutes, String validFromIso, String validUntilIso,
                               boolean sebRequired) {
+        return buildToken(userName, userEmail, examCode, validForMinutes,
+                validFromIso, validUntilIso, sebRequired, false);
+    }
+
+    private String buildToken(String userName, String userEmail, String examCode,
+                              int validForMinutes, String validFromIso, String validUntilIso,
+                              boolean sebRequired, boolean liveStream) {
         long   now = Instant.now().getEpochSecond();
         String jti = UUID.randomUUID().toString();
 
@@ -189,6 +212,9 @@ public class JwtService {
         }
         if (sebRequired) {
             sb.append(",\"requireSeb\":true");
+        }
+        if (liveStream) {
+            sb.append(",\"liveStream\":true");
         }
         sb.append("}");
 

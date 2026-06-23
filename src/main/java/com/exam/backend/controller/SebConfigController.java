@@ -63,10 +63,12 @@ public class SebConfigController {
         try {
             Exam exam = examService.findById(id);
 
-            // 1. Generate the signed JWT invite link — with sebRequired=true embedded in the token
+            // 1. Generate the signed JWT invite link — with sebRequired=true (and optional
+            //    liveStream) embedded in the token
             String inviteLink = jwtService.generateLink(
                     req.getUserName(), req.getUserEmail(), exam.getExamCode(),
-                    req.getValidForMinutes(), req.getValidFromIso(), req.getValidUntilIso(), true);
+                    req.getValidForMinutes(), req.getValidFromIso(), req.getValidUntilIso(),
+                    true, req.isLiveStream());
 
             // 2. Build the .seb XML config embedding that link
             String sebXml = sebConfigService.generateSebConfig(inviteLink, exam.getExamCode());

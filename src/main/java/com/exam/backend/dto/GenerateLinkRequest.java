@@ -19,4 +19,12 @@ public class GenerateLinkRequest {
      * Only relevant for .seb config generation — normal generate-link ignores this.
      */
     private boolean sebRequired;
+
+    /**
+     * When true, the generated JWT will include a "liveStream": true claim.
+     * The candidate frontend opens a WebSocket on exam start and streams its
+     * camera + screen to HR Admins in real time via WebRTC. Independent of
+     * sebRequired — live proctoring works with or without Safe Exam Browser.
+     */
+    private boolean liveStream;
 }

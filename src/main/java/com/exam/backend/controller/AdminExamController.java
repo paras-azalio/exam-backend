@@ -207,7 +207,8 @@ public class AdminExamController {
             Exam exam = examService.findById(id);
             String link      = jwtService.generateLink(
                     req.getUserName(), req.getUserEmail(), exam.getExamCode(),
-                    req.getValidForMinutes(), req.getValidFromIso(), req.getValidUntilIso());
+                    req.getValidForMinutes(), req.getValidFromIso(), req.getValidUntilIso(),
+                    false, req.isLiveStream());
             String expiresAt = jwtService.computeExpiresAt(req.getValidForMinutes(), req.getValidUntilIso());
             String validFrom = jwtService.computeValidFrom(req.getValidFromIso());
             return ResponseEntity.ok(new GenerateLinkResponse(link, expiresAt, validFrom));

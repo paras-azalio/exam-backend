@@ -20,8 +20,10 @@
 
   <properties>
     <!-- Change to 17 or 21 to match the JDK installed in your IntelliJ SDK list.
-         Java 21 is the current LTS and is safest. -->
-    <java.version>21</java.version>
+         Java 21 is the current LTS and is safest.
+         Set to 17 for this machine (only JDK 17 is installed); the code uses no
+         Java-21-only features (just var, text blocks, String.formatted). -->
+    <java.version>17</java.version>
   </properties>
 
   <dependencies>
@@ -71,6 +73,11 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    
+    <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-websocket</artifactId>
+	</dependency>
 
   </dependencies>
 
