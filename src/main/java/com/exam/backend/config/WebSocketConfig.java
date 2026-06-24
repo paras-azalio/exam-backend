@@ -55,15 +55,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         // admin gets a secure context for camera/mic. The proxied handshake
                         // still carries the browser's https:// Origin, so allow it here too.
                         "https://localhost:*",
-                        "https://127.0.0.1:*",
+                        "https://127.0.0.1:*"
                         // LAN proctoring: candidates open the exam from the Vite host's own
                         // LAN IP (e.g. https://172.15.0.109:5173), so the WebSocket handshake
                         // Origin is that host — not localhost. Allow the local /16 subnets the
                         // dev server binds to. Add your subnet here if it differs.
-                        "http://172.15.*.*:*",
-                        "https://172.15.*.*:*",
-                        "http://172.23.*.*:*",
-                        "https://172.23.*.*:*"
+//                        "http://172.15.*.*:*",
+//                        "https://172.15.*.*:*",
+//                        "http://172.23.*.*:*",
+//                        "https://172.23.*.*:*"
                 )
                 .withSockJS();
     }
