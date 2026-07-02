@@ -46,6 +46,7 @@ public class ResultService {
     private final ExamRepository          examRepository;
     private final ObjectMapper            mapper;
     private final VerbalEvaluationService verbalEvaluationService;
+    private final ChatHistoryRegistry chatHistoryRegistry;
 
     @Value("${storage.base-path:C:/exam-recordings}")
     private String basePath;
@@ -140,6 +141,7 @@ public class ResultService {
 
         ExamResult saved = resultRepository.save(result);
         log.info("Successfully persisted ExamResult with ID: {}", saved.getId());
+        chatHistoryRegistry.clear(req.getSessionKey());
         
         List<AiResult> aiResultsToFire = new java.util.ArrayList<>();
 //      Gets IDs of existing rows (verbal uploaded earlier)
