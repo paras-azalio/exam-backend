@@ -1,5 +1,6 @@
 package com.exam.backend.controller;
 
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +19,7 @@ import com.exam.backend.service.PresenceRegistry;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.exam.backend.service.ChatHistoryRegistry;
 
 /**
  * Handles the two responsibilities of the live-proctoring socket:
@@ -33,6 +35,7 @@ public class WebSocketController {
 
     private final SimpMessagingTemplate messaging;
     private final PresenceRegistry      registry;
+    private final ChatHistoryRegistry chatHistory;
 
     // ── Presence ────────────────────────────────────────────────────────────────
 
@@ -47,6 +50,7 @@ public class WebSocketController {
     @MessageMapping("/presence/leave")
     public void leave(@Payload PresencePayload payload) {
         registry.leave(payload.getSessionKey());
+        chatHistory.clear(payload.getSessionKey());   // ← added
         broadcastRoster();
     }
 
@@ -105,6 +109,7 @@ public class WebSocketController {
         if (msg.getTs() == 0L) {
             msg.setTs(System.currentTimeMillis());
         }
+        chatHistory.add(msg); 
 
         String destination = "candidate".equalsIgnoreCase(msg.getSender())
                 ? "/topic/chat/admin/"     + sessionKey   // candidate → admin
@@ -112,6 +117,13 @@ public class WebSocketController {
 
         messaging.convertAndSend(destination, msg);
         log.debug("Relayed chat from {} → {}", msg.getSender(), destination);
+    }
+    
+    @MessageMapping("/chat/history")
+    public void chatHistory(@Payload ChatMessage request) {
+        String sessionKey = request.getSessionKey();
+        if (sessionKey == null || sessionKey.isBlank()) return;
+        messaging.convertAndSend("/topic/chat/history/" + sessionKey, chatHistory.get(sessionKey));
     }
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -122,7 +134,10 @@ public class WebSocketController {
         String wsSessionId = event.getSessionId();
         String removed = registry.removeBySocket(wsSessionId);
         if (removed != null) {
+        	chatHistory.clear(removed);
             broadcastRoster();
         }
     }
+    
+    
 }
