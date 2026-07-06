@@ -59,10 +59,12 @@
 
     <!-- ── Lombok (@Data, @RequiredArgsConstructor, @NoArgsConstructor …)
              optional=true keeps it out of the fat-jar's compile classpath -->
+    <!-- Source: https://mvnrepository.com/artifact/org.projectlombok/lombok -->
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
-      <optional>true</optional>
+      <version>1.18.46</version>
+      <scope>compile</scope>
     </dependency>
 
     <!-- ── Test -->
