@@ -39,6 +39,21 @@ public class CorsConfig {
 
                 registry.addMapping("/**")
                         .allowedOriginPatterns(origins.toArray(new String[0]))
+                        .allowedOriginPatterns(
+                            "https://hr-orbit.azalio.io",
+                            "http://localhost:*",
+                            "http://127.0.0.1:*",
+                            // HTTPS dev origins (Vite now serves the frontend over HTTPS).
+                            "https://localhost:*",
+                            "https://127.0.0.1:*"
+                            // LAN proctoring: allow the dev host's own LAN subnets so a
+                            // candidate on another machine (hitting the Vite host's IP) is
+                            // accepted. Add your subnet here if it differs.
+//                            "http://172.15.*.*:*",
+//                            "https://172.15.*.*:*",
+//                            "http://172.23.*.*:*",
+//                            "https://172.23.*.*:*"
+                        )
                         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .exposedHeaders("Authorization")

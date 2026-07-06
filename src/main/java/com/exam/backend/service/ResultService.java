@@ -1,5 +1,25 @@
 package com.exam.backend.service;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
 import com.exam.backend.dto.SaveResultRequest;
 import com.exam.backend.dto.ScoredResult;
 import com.exam.backend.model.AiResult;
@@ -11,22 +31,9 @@ import com.exam.backend.repository.ExamRepository;
 import com.exam.backend.repository.ExamResultRepository;
 import com.exam.backend.repository.UsedTokenRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
 
 @Slf4j
 @Service
@@ -39,6 +46,7 @@ public class ResultService {
     private final ExamRepository          examRepository;
     private final ObjectMapper            mapper;
     private final VerbalEvaluationService verbalEvaluationService;
+    private final ChatHistoryRegistry chatHistoryRegistry;
 
     @Value("${storage.base-path:C:/exam-recordings}")
     private String basePath;
@@ -140,6 +148,7 @@ public class ResultService {
 
         ExamResult saved = resultRepository.save(result);
         log.info("Successfully persisted ExamResult with ID: {}", saved.getId());
+        chatHistoryRegistry.clear(req.getSessionKey());
         
         List<AiResult> aiResultsToFire = new java.util.ArrayList<>();
 //      Gets IDs of existing rows (verbal uploaded earlier)
@@ -466,6 +475,91 @@ public class ResultService {
         log.info("Successfully saved HTML report to: {}", file.toAbsolutePath());
         return file.toAbsolutePath().toString();
     }
+    @SuppressWarnings("unchecked")
+    public void regenerateHtmlReport(ExamResult result, List<AiResult> aiResults) {
+        if (result.getPdfPath() == null || result.getPdfPath().isBlank()) {
+            log.warn("regenerateHtmlReport: no pdfPath on result id={} — skipping", result.getId());
+            return;
+        }
+        try {
+            // ── Rebuild detail list from stored answers JSON ──────────────────────
+            List<Map<String, Object>> details;
+            if (result.getAnswersJson() != null && !result.getAnswersJson().isBlank()) {
+                details = mapper.readValue(result.getAnswersJson(),
+                        mapper.getTypeFactory().constructCollectionType(List.class, Map.class));
+            } else {
+                log.warn("regenerateHtmlReport: no answersJson on result id={} — skipping", result.getId());
+                return;
+            }
+
+            // ── Build lookup: questionId → AiResult ──────────────────────────────
+            Map<String, AiResult> aiMap = new LinkedHashMap<>();
+            for (AiResult ar : aiResults) {
+                if (ar.getQuestionId() != null) aiMap.put(ar.getQuestionId(), ar);
+            }
+
+            // ── Overlay AI scores onto verbal / subjective detail rows ────────────
+            double verbalScore    = 0.0;
+            double verbalMaxMarks = 0.0;
+            for (Map<String, Object> d : details) {
+                String qType = String.valueOf(d.getOrDefault("questionType", "mcq"));
+                if (!"verbal".equalsIgnoreCase(qType) && !"subjective".equalsIgnoreCase(qType)) continue;
+
+                String qId  = String.valueOf(d.get("questionId"));
+                AiResult ar = aiMap.get(qId);
+                if (ar == null) continue;
+
+                double maxMarks = ar.getMaxMarks() != null ? ar.getMaxMarks() : 0.0;
+                verbalMaxMarks += maxMarks;
+
+                if ("SUCCESS".equals(ar.getStatus()) && ar.getAiScore() != null) {
+                    double aiScore = ar.getAiScore();
+                    verbalScore += aiScore;
+                    d.put("marksAwarded", aiScore);
+                    d.put("aiScore",      aiScore);
+                    d.put("aiStatus",     "SUCCESS");
+                    if (ar.getTranscript() != null) d.put("transcript", ar.getTranscript());
+                    if (ar.getFeedback()   != null) d.put("feedback",   ar.getFeedback());
+                } else {
+                    d.put("aiStatus", ar.getStatus() != null ? ar.getStatus() : "PENDING");
+                }
+            }
+
+            // ── Recompute total score & grade ─────────────────────────────────────
+            double mcqScore    = result.getScore()      != null ? result.getScore()      : 0.0;
+            double mcqMax      = result.getTotalMarks()  != null ? result.getTotalMarks() : 0.0;
+            double totalScore    = Math.round((mcqScore + verbalScore) * 100.0) / 100.0;
+            double totalMaxMarks = mcqMax + verbalMaxMarks;
+
+            // Re-resolve grade using the exam's grading rules (loaded from DB)
+            String grade = result.getGrade(); // fallback to existing
+            try {
+                String examJson = examRepository.findByExamCodeIgnoreCase(result.getExamCode())
+                        .map(com.exam.backend.model.Exam::getExamData).orElse(null);
+                if (examJson != null) {
+                    Map<String, Object> examMap = mapper.readValue(examJson, Map.class);
+                    grade = resolveGrade(examMap, totalScore, totalMaxMarks);
+                }
+            } catch (Exception e) {
+                log.warn("regenerateHtmlReport: could not re-resolve grade for result id={}: {}", result.getId(), e.getMessage());
+            }
+
+            // ── Overwrite the HTML file ───────────────────────────────────────────
+            writeHtmlReport(
+                    result.getSessionKey(),
+                    result.getStudentName(),
+                    result.getExamCode(),
+                    result.getExamTitle() != null ? result.getExamTitle() : result.getExamCode(),
+                    totalScore, totalMaxMarks, grade,
+                    details);
+
+            log.info("regenerateHtmlReport: HTML updated for sessionKey={} totalScore={}/{}",
+                    result.getSessionKey(), totalScore, totalMaxMarks);
+
+        } catch (IOException e) {
+            log.error("regenerateHtmlReport: failed for result id={}: {}", result.getId(), e.getMessage(), e);
+        }
+    }
 
     @SuppressWarnings("unchecked")
     private String buildQuestionBlock(Map<String, Object> d) {
@@ -476,28 +570,61 @@ public class ResultService {
 
         // ── Verbal — evaluated asynchronously by AI ──────────────────────────
         if ("verbal".equalsIgnoreCase(qType)) {
+        	String aiStatus   = String.valueOf(d.getOrDefault("aiStatus", "PENDING"));
+            boolean evaluated = "SUCCESS".equalsIgnoreCase(aiStatus);
+            Object  aiScoreObj = d.get("aiScore");
+            String  transcript = d.get("transcript") != null ? esc(d.get("transcript").toString()) : null;
+            String  feedback   = d.get("feedback")   != null ? esc(d.get("feedback").toString())   : null;
+
+            String marksDisplay;
+            String statusBadge;
+            String bodyHtml;
+
+            if (evaluated && aiScoreObj != null) {
+                double aiScore = ((Number) aiScoreObj).doubleValue();
+                marksDisplay = String.format("+%.2f / %s pts", aiScore, totalMarks);
+                statusBadge  = "<span style='color:#16a34a;font-weight:bold'>&#10003; AI Evaluated</span>";
+                StringBuilder vbody = new StringBuilder("<div class='subj'>");
+                vbody.append("<div><strong>&#127908; Verbal answer recorded.</strong></div>");
+                if (transcript != null && !transcript.isBlank()) {
+                    vbody.append("<div style='margin-top:6px'><strong>Transcript:</strong><br>")
+                         .append(transcript).append("</div>");
+                }
+                if (feedback != null && !feedback.isBlank()) {
+                    vbody.append("<div style='margin-top:6px;color:#15803d'><strong>AI Feedback:</strong><br>")
+                         .append(feedback).append("</div>");
+                }
+                vbody.append("</div>");
+                bodyHtml = vbody.toString();
+            } else {
+                marksDisplay = "/ " + totalMarks + " pts (pending)";
+                statusBadge  = "<span style='color:#ea580c;font-weight:bold'>&#127908; Verbal (pending)</span>";
+                bodyHtml = "<div class='subj'><div style='color:#9a3412'>"
+                         + "&#127908; Verbal answer recorded — score will be updated after AI evaluation."
+                         + "</div></div>";
+            }
             return """
                     <div class='q-block' style='border-color:#f97316'>
                       <div class='q-header'>
                         <span class='q-num'>Question %s</span>
-                        <span style='color:#ea580c;font-weight:bold'>&#127908; Verbal</span>
-                        <span class='q-marks'>/ %s pts (AI evaluated)</span>
+                          %s
+                        <span class='q-marks'>%s</span>
                       </div>
                       <p class='q-text'>%s</p>
-                      <div class='subj'>
-                        <div style='color:#9a3412'>
-                          &#127908; Verbal answer recorded — score will be updated after AI evaluation.
-                        </div>
-                      </div>
+                      %s
                     </div>
-                    """.formatted(qNum, totalMarks, qText);
+                    """.formatted(qNum, statusBadge, marksDisplay, qText, bodyHtml);
         }
 
         boolean correct      = Boolean.TRUE.equals(d.get("correct"));
         boolean notAttempted = d.get("userAnswer") == null;
         Object  marksAwarded = d.get("marksAwarded");
 
-        String badge = correct
+        String badge = "subjective".equalsIgnoreCase(qType)
+                ? (d.get("aiScore") != null
+                ? "<span class='badge-correct'>&#10003; AI Evaluated</span>"
+                : "<span class='badge-skipped'>&#8213; Pending AI Evaluation</span>")
+            : correct
                 ? "<span class='badge-correct'>&#10003; Correct</span>"
                 : notAttempted
                     ? "<span class='badge-skipped'>&#8213; Not Attempted</span>"
@@ -508,15 +635,30 @@ public class ResultService {
         StringBuilder body = new StringBuilder();
 
         if ("subjective".equalsIgnoreCase(qType)) {
-            String userAns     = formatAnswer(d.get("userAnswer"));
-            String expectedAns = d.get("expectedReply") != null && !d.get("expectedReply").toString().isBlank()
-                    ? d.get("expectedReply").toString()
+        	 String aiStatus   = String.valueOf(d.getOrDefault("aiStatus", "PENDING"));
+             boolean evaluated = "SUCCESS".equalsIgnoreCase(aiStatus);
+             Object  aiScoreObj = d.get("aiScore");
+             String  feedback   = d.get("feedback") != null ? esc(d.get("feedback").toString()) : null;
+            String userAns = formatAnswer(d.get("userAnswer"));
+            // correctAnswer is always empty for subjective (AI-scored); use expectedReply instead
+            Object expectedReplyObj = d.get("expectedReply");
+            String corrAns = (expectedReplyObj != null && !expectedReplyObj.toString().isBlank())
+                    ? expectedReplyObj.toString()
                     : formatAnswer(d.get("correctAnswer"));
             body.append("<div class='subj'>")
                 .append("<div><strong>Your answer:</strong> ").append(esc(userAns)).append("</div>")
                 .append("<div class='correct-hint'><strong>Expected answer:</strong> ")
-                .append(esc(expectedAns)).append("</div>")
+                .append(esc(corrAns)).append("</div>")
                 .append("</div>");
+            if (evaluated && aiScoreObj != null) {
+                if (feedback != null && !feedback.isBlank()) {
+                    body.append("<div style='color:#15803d;margin-top:4px'><strong>AI Feedback:</strong><br>")
+                        .append(feedback).append("</div>");
+                }
+            } else {
+                body.append("<div style='color:#9a3412;margin-top:4px'>AI evaluation pending…</div>");
+            }
+            body.append("</div>");
         
         } else {
             List<Object> options    = (List<Object>) d.get("options");

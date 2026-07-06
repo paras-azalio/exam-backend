@@ -23,7 +23,7 @@ import java.util.UUID;
  *
  * Token payload:
  *   { "sub": "email", "name": "Full Name", "examCode": "CODE",
- *     "iat": epoch, "exp": epoch [, "nbf": epoch] }
+ *     "iat": epoch, "exp": epoch [, "nbf": epoch] [, "liveStream": true] }
  *
  * Optional nbf (not-before) claim is included when a validFromIso is supplied,
  * allowing tokens that are generated today but only become usable at a future datetime.
@@ -59,8 +59,22 @@ public class JwtService {
      */
     public String generateLink(String userName, String userEmail, String examCode,
                                int validForMinutes, String validFromIso, String validUntilIso) {
-    	log.info("Generating JWT invite link for userEmail: '{}', examCode: '{}'", userEmail, examCode);
-        String token = buildToken(userName, userEmail, examCode, validForMinutes, validFromIso, validUntilIso);
+        return generateLink(userName, userEmail, examCode, validForMinutes, validFromIso, validUntilIso, false);
+    }
+
+    /**
+     * Generates a signed invite link with an optional live-stream flag.
+     *
+     * @param liveStream   when true, adds "liveStream":true so the frontend opens a
+     *                     WebSocket and streams camera + screen to HR Admins in real time
+     */
+    public String generateLink(String userName, String userEmail, String examCode,
+            int validForMinutes, String validFromIso, String validUntilIso,
+            boolean liveStream) {
+        log.info("Generating JWT invite link for userEmail: '{}', examCode: '{}', liveStream: {}",
+                userEmail, examCode, liveStream);
+        String token = buildToken(userName, userEmail, examCode, validForMinutes,
+                validFromIso, validUntilIso, liveStream);
         log.debug("Successfully generated JWT invite link for userEmail: '{}'", userEmail);
         return frontendUrl.replaceAll("/$", "") + "/?usr=" + token;
     }
@@ -144,6 +158,12 @@ public class JwtService {
 
     private String buildToken(String userName, String userEmail, String examCode,
                               int validForMinutes, String validFromIso, String validUntilIso) {
+        return buildToken(userName, userEmail, examCode, validForMinutes, validFromIso, validUntilIso, false);
+    }
+
+    private String buildToken(String userName, String userEmail, String examCode,
+                              int validForMinutes, String validFromIso, String validUntilIso,
+                              boolean liveStream) {
         long   now = Instant.now().getEpochSecond();
         String jti = UUID.randomUUID().toString();
 
@@ -168,6 +188,9 @@ public class JwtService {
         ));
         if (nbf != null) {
             sb.append(",\"nbf\":").append(nbf);
+        }
+        if (liveStream) {
+            sb.append(",\"liveStream\":true");
         }
         sb.append("}");
 
