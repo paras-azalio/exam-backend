@@ -31,9 +31,4 @@ public class SaveResultRequest {
 
     /** Number of tab-switch / focus-loss violations recorded on the frontend. */
     private Integer violations;
-
-    // --- GAZE TRACKING START ---
-    /** Client-side gaze / face tracking events captured during the exam. */
-    private List<Map<String, Object>> gazeEvents;
-    // --- GAZE TRACKING END ---
 }
