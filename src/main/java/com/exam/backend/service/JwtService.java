@@ -23,7 +23,7 @@ import java.util.UUID;
  *
  * Token payload:
  *   { "sub": "email", "name": "Full Name", "examCode": "CODE",
- *     "iat": epoch, "exp": epoch [, "nbf": epoch] [, "liveStream": true] }
+ *     "iat": epoch, "exp": epoch [, "nbf": epoch] [, "requireSeb": true] [, "liveStream": true] }
  *
  * Optional nbf (not-before) claim is included when a validFromIso is supplied,
  * allowing tokens that are generated today but only become usable at a future datetime.
@@ -62,19 +62,33 @@ public class JwtService {
         return generateLink(userName, userEmail, examCode, validForMinutes, validFromIso, validUntilIso, false);
     }
 
-    /**
-     * Generates a signed invite link with an optional live-stream flag.
+   /**
+     * Generates a signed invite link with an optional SEB-required flag embedded in the JWT.
      *
+     * @param sebRequired  when true, adds "requireSeb":true to the JWT payload so the
+     *                     frontend blocks access outside Safe Exam Browser
+     */
+    public String generateLink(String userName, String userEmail, String examCode,
+                               int validForMinutes, String validFromIso, String validUntilIso,
+                               boolean sebRequired) {
+        return generateLink(userName, userEmail, examCode, validForMinutes,
+                validFromIso, validUntilIso, sebRequired, false);
+    }
+
+    /**
+     * Generates a signed invite link with optional SEB-required and live-stream flags.
+     *
+     * @param sebRequired  when true, adds "requireSeb":true to the JWT payload
      * @param liveStream   when true, adds "liveStream":true so the frontend opens a
      *                     WebSocket and streams camera + screen to HR Admins in real time
      */
     public String generateLink(String userName, String userEmail, String examCode,
-            int validForMinutes, String validFromIso, String validUntilIso,
-            boolean liveStream) {
-        log.info("Generating JWT invite link for userEmail: '{}', examCode: '{}', liveStream: {}",
-                userEmail, examCode, liveStream);
+                               int validForMinutes, String validFromIso, String validUntilIso,
+                               boolean sebRequired, boolean liveStream) {
+        log.info("Generating JWT invite link for userEmail: '{}', examCode: '{}', sebRequired: {}, liveStream: {}",
+                userEmail, examCode, sebRequired, liveStream);
         String token = buildToken(userName, userEmail, examCode, validForMinutes,
-                validFromIso, validUntilIso, liveStream);
+                validFromIso, validUntilIso, sebRequired, liveStream);
         log.debug("Successfully generated JWT invite link for userEmail: '{}'", userEmail);
         return frontendUrl.replaceAll("/$", "") + "/?usr=" + token;
     }
@@ -161,9 +175,16 @@ public class JwtService {
         return buildToken(userName, userEmail, examCode, validForMinutes, validFromIso, validUntilIso, false);
     }
 
+  private String buildToken(String userName, String userEmail, String examCode,
+                              int validForMinutes, String validFromIso, String validUntilIso,
+                              boolean sebRequired) {
+        return buildToken(userName, userEmail, examCode, validForMinutes,
+                validFromIso, validUntilIso, sebRequired, false);
+    }
+
     private String buildToken(String userName, String userEmail, String examCode,
                               int validForMinutes, String validFromIso, String validUntilIso,
-                              boolean liveStream) {
+                              boolean sebRequired, boolean liveStream) {
         long   now = Instant.now().getEpochSecond();
         String jti = UUID.randomUUID().toString();
 
@@ -186,8 +207,11 @@ public class JwtService {
             escapeJson(examCode),
             now, exp
         ));
-        if (nbf != null) {
+       if (nbf != null) {
             sb.append(",\"nbf\":").append(nbf);
+        }
+        if (sebRequired) {
+            sb.append(",\"requireSeb\":true");
         }
         if (liveStream) {
             sb.append(",\"liveStream\":true");
