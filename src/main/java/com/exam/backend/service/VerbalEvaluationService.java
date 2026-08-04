@@ -7,7 +7,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -296,14 +295,11 @@ public class VerbalEvaluationService {
             payload.put("sessionKey",     sessionKey);
             payload.put("questionId",     aiResult.getQuestionId());
             payload.put("questionText",   aiResult.getQuestion());
-            if (AiResultType.SUBJECTIVE.equals(aiResult.getType())) {
-                List<String> expectedList = Arrays.asList(
-                    aiResult.getExpectedReply().split("\\|\\|\\|")
-                );
-                payload.put("expectedReply", expectedList);
-            } else {
-                payload.put("expectedReply", aiResult.getExpectedReply());
-            }
+            // The AI grading service's schema declares expectedReply as a string,
+            // so send a string for BOTH verbal and subjective. (Previously subjective
+            // sent an array, which FastAPI rejected with HTTP 422 → row marked FAILED.)
+            payload.put("expectedReply",
+                    aiResult.getExpectedReply() != null ? aiResult.getExpectedReply() : "");
             payload.put("precision",      aiResult.getPrecisionLevel());
             payload.put("maxMarks",       aiResult.getMaxMarks());
             if (AiResultType.SUBJECTIVE.equals(aiResult.getType())) {
